@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquareIcon, XIcon, SendIcon, RefreshCwIcon } from './icons';
 import { ChatMessage } from '../types';
 import { sendMessageToAI } from '../services/geminiService';
+import { useAuth } from '../hooks/useAuth';
 
 const initialMessages: ChatMessage[] = [
     {
@@ -23,6 +24,8 @@ const ChatWidget: React.FC = () => {
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    // FIX: Use the `useAuth` hook to get context-aware data.
+    const { portfolio, bonds, transactions } = useAuth();
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -43,7 +46,8 @@ const ChatWidget: React.FC = () => {
         setInputValue('');
         setIsLoading(true);
 
-        const aiResponse = await sendMessageToAI(messageText);
+        // FIX: Pass user data to the AI service to get context-aware responses.
+        const aiResponse = await sendMessageToAI(messageText, portfolio, bonds, transactions);
 
         const newAiMessage: ChatMessage = {
             id: Date.now() + 1,

@@ -1,3 +1,8 @@
+export interface SwitchableAccount {
+    id: string;
+    name: string;
+    type: 'Personnel' | 'Entreprise';
+}
 
 export interface User {
   id: string;
@@ -12,6 +17,7 @@ export interface User {
     investmentHorizon: 'Court terme' | 'Moyen terme' | 'Long terme';
     annualIncome?: string;
   };
+  associatedAccounts?: SwitchableAccount[];
 }
 
 export interface Portfolio {
@@ -66,4 +72,12 @@ export interface ChatMessage {
     text: string;
     sender: 'user' | 'ai';
     suggestions?: string[];
+}
+
+// Structure for account-specific data
+export interface UserData {
+    user: User;
+    portfolio: Portfolio;
+    bonds: Bond[];
+    transactions: Transaction[];
 }

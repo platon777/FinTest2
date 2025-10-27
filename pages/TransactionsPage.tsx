@@ -1,6 +1,5 @@
-
 import React, { useState, useMemo } from 'react';
-import { mockTransactions } from '../data/mock';
+import { useAuth } from '../hooks/useAuth';
 import { Transaction, TransactionStatus, TransactionType } from '../types';
 import Card from '../components/Card';
 
@@ -20,19 +19,35 @@ const getStatusBadgeColor = (status: TransactionStatus) => {
 const ITEMS_PER_PAGE = 5;
 
 const TransactionsPage: React.FC = () => {
+    const { transactions, isLoadingData } = useAuth();
     const [searchTerm, setSearchTerm] = useState('');
     const [filters, setFilters] = useState<{ type: 'all' | TransactionType, status: 'all' | TransactionStatus }>({ type: 'all', status: 'all' });
     const [currentPage, setCurrentPage] = useState(1);
 
     const filteredTransactions = useMemo(() => {
-        return mockTransactions
+        return transactions
             .filter(tx => searchTerm === '' || tx.description.toLowerCase().includes(searchTerm.toLowerCase()))
             .filter(tx => filters.type === 'all' || tx.type === filters.type)
             .filter(tx => filters.status === 'all' || tx.status === filters.status);
-    }, [searchTerm, filters]);
+    }, [searchTerm, filters, transactions]);
 
     const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE);
     const paginatedTransactions = filteredTransactions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    
+    // Reset to page 1 when filters or search term change
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, filters]);
+
+    const SkeletonRow = () => (
+        <tr className="animate-pulse">
+            <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+            <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
+            <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-48"></div></td>
+            <td className="px-6 py-4 text-right"><div className="h-4 bg-gray-200 rounded w-28 ml-auto"></div></td>
+            <td className="px-6 py-4 text-center"><div className="h-6 w-24 mx-auto bg-gray-200 rounded-full"></div></td>
+        </tr>
+    );
 
     return (
         <div className="space-y-6">
@@ -44,12 +59,12 @@ const TransactionsPage: React.FC = () => {
                         type="text"
                         placeholder="Rechercher par description..."
                         value={searchTerm}
-                        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                        onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     />
                     <select
                         value={filters.type}
-                        onChange={(e) => { setFilters(f => ({ ...f, type: e.target.value as any })); setCurrentPage(1); }}
+                        onChange={(e) => setFilters(f => ({ ...f, type: e.target.value as any }))}
                         className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     >
                         <option value="all">Tous les types</option>
@@ -57,7 +72,7 @@ const TransactionsPage: React.FC = () => {
                     </select>
                     <select
                         value={filters.status}
-                        onChange={(e) => { setFilters(f => ({ ...f, status: e.target.value as any })); setCurrentPage(1); }}
+                        onChange={(e) => setFilters(f => ({ ...f, status: e.target.value as any }))}
                         className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     >
                         <option value="all">Tous les statuts</option>
@@ -101,26 +116,30 @@ const TransactionsPage: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {paginatedTransactions.map((tx) => (
-                            <tr key={tx.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(tx.date).toLocaleDateString('fr-FR')}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{tx.type}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{tx.description}</td>
-                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {tx.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'USD' })}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-center">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeColor(tx.status)}`}>
-                                        {tx.status}
-                                    </span>
-                                </td>
-                            </tr>
-                        ))}
+                        {isLoadingData ? (
+                            Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => <SkeletonRow key={i} />)
+                        ) : (
+                            paginatedTransactions.map((tx) => (
+                                <tr key={tx.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(tx.date).toLocaleDateString('fr-FR')}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{tx.type}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{tx.description}</td>
+                                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${tx.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {tx.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'USD' })}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeColor(tx.status)}`}>
+                                            {tx.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
                     </tbody>
                 </table>
             </div>
 
-            {paginatedTransactions.length === 0 && <p className="text-gray-500 text-center">Aucune transaction trouvée.</p>}
+            {!isLoadingData && paginatedTransactions.length === 0 && <p className="text-gray-500 text-center">Aucune transaction trouvée.</p>}
             
             {totalPages > 1 && (
                  <div className="flex justify-center items-center space-x-2 mt-6">

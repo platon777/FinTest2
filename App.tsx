@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useAuth } from './hooks/useAuth';
 import LoginPage from './pages/LoginPage';
@@ -12,10 +13,11 @@ import ChatWidget from './components/ChatWidget';
 export type Page = 'dashboard' | 'bonds' | 'transactions' | 'profile' | 'new-order';
 
 const App: React.FC = () => {
-  const { user } = useAuth();
+  // FIX: Destructure `loggedInUser` from `useAuth` instead of `user` to match the AuthContextType.
+  const { loggedInUser } = useAuth();
   const [currentPage, setCurrentPage] = React.useState<Page>('dashboard');
 
-  if (!user) {
+  if (!loggedInUser) {
     return <LoginPage />;
   }
 
