@@ -1,7 +1,5 @@
-
-
 import { GoogleGenAI, Chat } from "@google/genai";
-import { ChatMessage, Portfolio, Bond, Transaction, BondStatus } from '../types';
+import { ChatMessage, Portfolio, Subscription, Transaction, Instrument, SubscriptionStatus } from '../types';
 
 // This is a MOCKED service. In a real application, you would initialize and use the Gemini API here.
 // const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -10,8 +8,9 @@ import { ChatMessage, Portfolio, Bond, Transaction, BondStatus } from '../types'
 const getAIResponse = (
     message: string,
     portfolio: Portfolio | null,
-    bonds: Bond[],
-    transactions: Transaction[]
+    subscriptions: Subscription[],
+    transactions: Transaction[],
+    instruments: Instrument[]
 ): Partial<ChatMessage> => {
     const lowerCaseMessage = message.toLowerCase();
 
@@ -23,25 +22,36 @@ const getAIResponse = (
             text: `La valeur totale de votre portefeuille est de ${portfolio.totalValue.toLocaleString('fr-FR', { style: 'currency', currency: 'USD' })}.`
         };
     }
-    if (lowerCaseMessage.includes('prochaine obligation') && lowerCaseMessage.includes('maturité')) {
-        if (!bonds || bonds.length === 0) {
-            return { text: "Vous n'avez aucune obligation active." };
+    if (lowerCaseMessage.includes('prochaine obligation') || lowerCaseMessage.includes('prochain investissement') && lowerCaseMessage.includes('maturité')) {
+        if (!subscriptions || subscriptions.length === 0) {
+            return { text: "Vous n'avez aucun investissement actif." };
         }
-        const nextBond = [...bonds]
-            .filter(b => b.status === BondStatus.ACTIVE)
-            .sort((a, b) => new Date(a.maturityDate).getTime() - new Date(b.maturityDate).getTime())[0];
-        if (nextBond) {
+
+        const activeSubscriptions = subscriptions.filter(s => s.status === SubscriptionStatus.ACTIVE);
+        if (activeSubscriptions.length === 0) {
+            return { text: "Vous n'avez aucun investissement actif." };
+        }
+
+        const nextSubscription = activeSubscriptions.sort((a, b) => {
+            const dateA = a.effectiveMaturityDate ? new Date(a.effectiveMaturityDate).getTime() : Infinity;
+            const dateB = b.effectiveMaturityDate ? new Date(b.effectiveMaturityDate).getTime() : Infinity;
+            return dateA - dateB;
+        })[0];
+        
+        const instrument = instruments.find(i => i.instrumentId === nextSubscription.instrumentId);
+        
+        if (nextSubscription && instrument && nextSubscription.effectiveMaturityDate) {
             return {
-                text: `Votre prochaine obligation, "${nextBond.name}", arrive à maturité le ${new Date(nextBond.maturityDate).toLocaleDateString('fr-FR')}.`
+                text: `Votre prochain investissement, "${instrument.name}", arrive à maturité le ${new Date(nextSubscription.effectiveMaturityDate).toLocaleDateString('fr-FR')}.`
             };
         }
-        return { text: "Vous n'avez aucune obligation active arrivant à maturité." };
+        return { text: "Vous n'avez aucun investissement actif avec une date de maturité définie." };
     }
     if (lowerCaseMessage.includes('dernières transactions')) {
         if (!transactions || transactions.length === 0) {
             return { text: "Aucune transaction récente à afficher." };
         }
-        const lastTx = transactions.slice(0, 3).map(tx => `- ${new Date(tx.date).toLocaleDateString('fr-FR')}: ${tx.description} (${tx.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'USD' })} - ${tx.status})`).join('\n');
+        const lastTx = transactions.slice(0, 3).map(tx => `- ${new Date(tx.creationDate).toLocaleDateString('fr-FR')}: ${tx.description} (${tx.amount.toLocaleString('fr-FR', { style: 'currency', currency: tx.currency })} - ${tx.status})`).join('\n');
         return {
             text: `Voici vos 3 dernières transactions :\n${lastTx}`
         };
@@ -63,8 +73,9 @@ const getAIResponse = (
 export const sendMessageToAI = async (
     message: string,
     portfolio: Portfolio | null,
-    bonds: Bond[],
-    transactions: Transaction[]
+    subscriptions: Subscription[],
+    transactions: Transaction[],
+    instruments: Instrument[]
 ): Promise<Partial<ChatMessage>> => {
   console.log("Sending to AI:", message);
 
@@ -75,7 +86,7 @@ export const sendMessageToAI = async (
   // For this demo, we simulate a delay and a canned response.
   return new Promise(resolve => {
     setTimeout(() => {
-      resolve(getAIResponse(message, portfolio, bonds, transactions));
+      resolve(getAIResponse(message, portfolio, subscriptions, transactions, instruments));
     }, 1500);
   });
 };

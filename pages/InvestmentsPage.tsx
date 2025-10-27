@@ -116,6 +116,8 @@ const InvestmentsPage: React.FC = () => {
                 if (sortKey === 'maturityDate') {
                     const dateA = instrumentA?.maturityDate ? new Date(instrumentA.maturityDate).getTime() : 0;
                     const dateB = instrumentB?.maturityDate ? new Date(instrumentB.maturityDate).getTime() : 0;
+                    if (!dateA) return 1; // Put subscriptions without maturity date at the end
+                    if (!dateB) return -1;
                     return dateA - dateB;
                 }
                 return b[sortKey] - a[sortKey];

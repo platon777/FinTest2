@@ -1,14 +1,16 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { User, SwitchableAccount, Portfolio, Bond, Transaction } from '../types';
+import { User, SwitchableAccount, Portfolio, Subscription, Transaction, ClientAccount, Instrument } from '../types';
 import * as apiService from '../services/apiService';
 import { mockDatabase } from '../data/mock';
 
 interface AuthContextType {
-  loggedInUser: User | null; // The user who is logged in
-  displayedUser: User | null; // The user profile being displayed (can be an associated account)
+  loggedInUser: User | null;
+  displayedUser: User | null;
   portfolio: Portfolio | null;
-  bonds: Bond[];
+  subscriptions: Subscription[];
   transactions: Transaction[];
+  accounts: ClientAccount[];
+  instruments: Instrument[];
   isLoadingData: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -27,8 +29,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeAccount, setActiveAccount] = useState<SwitchableAccount | null>(null);
   
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
-  const [bonds, setBonds] = useState<Bond[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [accounts, setAccounts] = useState<ClientAccount[]>([]);
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   const logout = useCallback(() => {
@@ -36,8 +40,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDisplayedUser(null);
     setActiveAccount(null);
     setPortfolio(null);
-    setBonds([]);
+    setSubscriptions([]);
     setTransactions([]);
+    setAccounts([]);
+    setInstruments([]);
   }, []);
   
   const resetTimeout = useCallback(() => {
@@ -67,16 +73,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const fetchDataForAccount = async () => {
             setIsLoadingData(true);
             try {
-                const [userData, portfolioData, bondsData, transactionsData] = await Promise.all([
+                const [userData, portfolioData, subscriptionsData, transactionsData, accountsData, instrumentsData] = await Promise.all([
                     apiService.getUserData(activeAccount.id),
                     apiService.getPortfolio(activeAccount.id),
-                    apiService.getBonds(activeAccount.id),
-                    apiService.getTransactions(activeAccount.id)
+                    apiService.getSubscriptions(activeAccount.id),
+                    apiService.getTransactions(activeAccount.id),
+                    apiService.getAccounts(activeAccount.id),
+                    apiService.getInstruments(activeAccount.id)
                 ]);
                 setDisplayedUser(userData);
                 setPortfolio(portfolioData);
-                setBonds(bondsData);
+                setSubscriptions(subscriptionsData);
                 setTransactions(transactionsData);
+                setAccounts(accountsData);
+                setInstruments(instrumentsData);
             } catch (error) {
                 console.error("Failed to fetch account data:", error);
             } finally {
@@ -131,8 +141,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loggedInUser,
     displayedUser,
     portfolio,
-    bonds,
+    subscriptions,
     transactions,
+    accounts,
+    instruments,
     isLoadingData,
     login, 
     logout, 

@@ -1,19 +1,18 @@
-
 import React from 'react';
 import { useAuth } from './hooks/useAuth';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
-import BondsPage from './pages/BondsPage';
+import InvestmentsPage from './pages/InvestmentsPage';
 import TransactionsPage from './pages/TransactionsPage';
 import ProfilePage from './pages/ProfilePage';
 import NewOrderPage from './pages/NewOrderPage';
 import Layout from './components/Layout';
 import ChatWidget from './components/ChatWidget';
+import AccountsPage from './pages/AccountsPage';
 
-export type Page = 'dashboard' | 'bonds' | 'transactions' | 'profile' | 'new-order';
+export type Page = 'dashboard' | 'investments' | 'transactions' | 'profile' | 'new-order' | 'accounts';
 
 const App: React.FC = () => {
-  // FIX: Destructure `loggedInUser` from `useAuth` instead of `user` to match the AuthContextType.
   const { loggedInUser } = useAuth();
   const [currentPage, setCurrentPage] = React.useState<Page>('dashboard');
 
@@ -25,14 +24,16 @@ const App: React.FC = () => {
     switch (currentPage) {
       case 'dashboard':
         return <DashboardPage setCurrentPage={setCurrentPage} />;
-      case 'bonds':
-        return <BondsPage />;
+      case 'investments':
+        return <InvestmentsPage />;
       case 'transactions':
         return <TransactionsPage />;
       case 'profile':
         return <ProfilePage />;
       case 'new-order':
         return <NewOrderPage />;
+      case 'accounts':
+        return <AccountsPage />;
       default:
         return <DashboardPage setCurrentPage={setCurrentPage} />;
     }

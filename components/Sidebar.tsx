@@ -1,9 +1,8 @@
-
 import React from 'react';
 import { Page } from '../App';
 import { useAuth } from '../hooks/useAuth';
 import {
-  BankIcon, XIcon, LogoutIcon, DashboardIcon, BondsIcon, TransactionsIcon, ProfileIcon, NewOrderIcon
+  BankIcon, XIcon, LogoutIcon, DashboardIcon, TrendingUpIcon, TransactionsIcon, ProfileIcon, NewOrderIcon, WalletIcon
 } from './icons';
 
 interface SidebarProps {
@@ -13,10 +12,10 @@ interface SidebarProps {
   setCurrentPage: (page: Page) => void;
 }
 
-// FIX: Renamed `icon` property to `Icon` to match the prop name expected by the NavLink component.
 const navItems = [
   { page: 'dashboard' as Page, label: 'Dashboard', Icon: DashboardIcon },
-  { page: 'bonds' as Page, label: 'Mes Obligations', Icon: BondsIcon },
+  { page: 'accounts' as Page, label: 'Mes Comptes', Icon: WalletIcon },
+  { page: 'investments' as Page, label: 'Mes Investissements', Icon: TrendingUpIcon },
   { page: 'transactions' as Page, label: 'Transactions', Icon: TransactionsIcon },
   { page: 'profile' as Page, label: 'Profil KYC', Icon: ProfileIcon },
   { page: 'new-order' as Page, label: 'Nouvel Ordre', Icon: NewOrderIcon },

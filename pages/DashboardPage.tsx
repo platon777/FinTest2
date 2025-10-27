@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import Card from '../components/Card';
-import { Transaction, Bond, TransactionType } from '../types';
+import { Transaction, Subscription, DetailedTransactionType, SubscriptionStatus } from '../types';
 import { Page } from '../App';
 import { useAuth } from '../hooks/useAuth';
 
@@ -45,8 +45,8 @@ const PortfolioOverviewCard: React.FC = () => {
                     </p>
                 </div>
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-500">Obligations actives</p>
-                    <p className="text-2xl font-bold text-blue-800">{portfolio.activeBondsCount}</p>
+                    <p className="text-sm text-gray-500">Souscriptions actives</p>
+                    <p className="text-2xl font-bold text-blue-800">{portfolio.activeSubscriptionsCount}</p>
                 </div>
             </div>
             <div className="h-64">
@@ -65,18 +65,19 @@ const PortfolioOverviewCard: React.FC = () => {
 };
 
 const TransactionItem: React.FC<{ tx: Transaction }> = ({ tx }) => {
-    const isPositive = tx.type === TransactionType.DEPOSIT;
+    const isPositive = [DetailedTransactionType.DEPOSIT, DetailedTransactionType.INTEREST_PAYMENT, DetailedTransactionType.MATURITY_REIMBURSEMENT].includes(tx.transactionType);
+    const amount = isPositive ? tx.amount : -tx.amount;
     return (
         <div className="flex justify-between items-center py-3 border-b border-gray-100 last:border-b-0">
             <div>
                 <p className="font-semibold text-gray-800">{tx.description}</p>
-                <p className="text-sm text-gray-500">{new Date(tx.date).toLocaleDateString('fr-FR')}</p>
+                <p className="text-sm text-gray-500">{new Date(tx.creationDate).toLocaleDateString('fr-FR')}</p>
             </div>
             <div className="text-right">
                 <p className={`font-bold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                    {tx.amount.toLocaleString('fr-FR', { style: 'currency', currency: 'USD' })}
+                    {amount.toLocaleString('fr-FR', { style: 'currency', currency: tx.currency })}
                 </p>
-                <p className="text-xs text-gray-400">{tx.status}</p>
+                <p className="text-xs text-gray-400 capitalize">{tx.status.replace(/_/g, ' ').toLowerCase()}</p>
             </div>
         </div>
     );
@@ -95,7 +96,7 @@ const RecentTransactionsCard: React.FC<{ setCurrentPage: (page: Page) => void; }
             ) : (
                 <>
                     <div className="space-y-2">
-                        {transactions.slice(0, 5).map(tx => <TransactionItem key={tx.id} tx={tx} />)}
+                        {transactions.slice(0, 5).map(tx => <TransactionItem key={tx.transactionId} tx={tx} />)}
                     </div>
                     <button onClick={() => setCurrentPage('transactions')} className="mt-4 text-sm font-semibold text-blue-600 hover:underline w-full text-center">
                         Voir toutes les transactions
@@ -106,10 +107,13 @@ const RecentTransactionsCard: React.FC<{ setCurrentPage: (page: Page) => void; }
     );
 };
 
-const ActiveBondsCard: React.FC = () => {
-    const { bonds, isLoadingData } = useAuth();
+const ActiveInvestmentsCard: React.FC = () => {
+    const { subscriptions, instruments, isLoadingData } = useAuth();
+    
+    const activeSubscriptions = subscriptions.filter(s => s.status === SubscriptionStatus.ACTIVE);
+
     return (
-        <Card title="Obligations actives">
+        <Card title="Investissements Actifs">
             {isLoadingData ? (
                  <div className="space-y-4">
                     <SkeletonLoader className="h-16" />
@@ -117,20 +121,25 @@ const ActiveBondsCard: React.FC = () => {
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {bonds.filter(b => b.status === 'Active').map((bond: Bond) => (
-                        <div key={bond.id} className="p-3 bg-gray-50 rounded-lg">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="font-bold text-blue-800">{bond.name}</p>
-                                    <p className="text-sm text-gray-600">Montant: {bond.investedAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'USD' })}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="font-semibold text-green-600">{bond.yieldRate}%</p>
-                                    <p className="text-xs text-gray-500">Maturité: {new Date(bond.maturityDate).toLocaleDateString('fr-FR')}</p>
+                    {activeSubscriptions.map((sub: Subscription) => {
+                        const instrument = instruments.find(i => i.instrumentId === sub.instrumentId);
+                        if (!instrument) return null;
+                        
+                        return (
+                            <div key={sub.subscriptionId} className="p-3 bg-gray-50 rounded-lg">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <p className="font-bold text-blue-800">{instrument.name}</p>
+                                        <p className="text-sm text-gray-600">Montant: {sub.investedAmount.toLocaleString('fr-FR', { style: 'currency', currency: instrument.currency })}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="font-semibold text-green-600">{instrument.annualYieldRate}%</p>
+                                        {instrument.maturityDate && <p className="text-xs text-gray-500">Maturité: {new Date(instrument.maturityDate).toLocaleDateString('fr-FR')}</p>}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             )}
         </Card>
@@ -153,7 +162,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ setCurrentPage }) => {
             </div>
             <div className="lg:col-span-1 space-y-6">
                 <RecentTransactionsCard setCurrentPage={setCurrentPage} />
-                <ActiveBondsCard />
+                <ActiveInvestmentsCard />
             </div>
         </div>
     </div>

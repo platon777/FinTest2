@@ -1,79 +1,121 @@
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Card from '../components/Card';
+import { useAuth } from '../hooks/useAuth';
+import { InstrumentStatus } from '../types';
 
 const NewOrderPage: React.FC = () => {
-    const [investmentType, setInvestmentType] = useState('obligations');
+    const { instruments, accounts, isLoadingData } = useAuth();
+    
+    const [selectedInstrumentId, setSelectedInstrumentId] = useState('');
+    const [selectedAccountId, setSelectedAccountId] = useState('');
     const [amount, setAmount] = useState('');
-    const [executionDate, setExecutionDate] = useState('');
     const [notes, setNotes] = useState('');
     const [showConfirmation, setShowConfirmation] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    const availableInstruments = useMemo(() => {
+        return instruments.filter(inst => inst.status === InstrumentStatus.AVAILABLE);
+    }, [instruments]);
+
+    const investmentAccounts = useMemo(() => {
+        return accounts.filter(acc => acc.accountType === 'INVESTISSEMENT');
+    }, [accounts]);
+
+    const selectedInstrument = instruments.find(i => i.instrumentId === parseInt(selectedInstrumentId));
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
-        // Simulate API call
+        // Simulate API call to create a SUBSCRIPTION transaction
         setTimeout(() => {
             console.log({
-                investmentType,
-                amount,
-                executionDate,
+                instrumentId: selectedInstrumentId,
+                accountId: selectedAccountId,
+                amount: parseFloat(amount),
                 notes,
             });
             setIsSubmitting(false);
             setShowConfirmation(true);
             // Reset form
-            setInvestmentType('obligations');
+            setSelectedInstrumentId('');
+            setSelectedAccountId('');
             setAmount('');
-            setExecutionDate('');
             setNotes('');
         }, 1500);
     };
 
+    if (isLoadingData) {
+        return (
+            <div className="max-w-2xl mx-auto">
+                <div className="h-8 bg-gray-200 rounded w-1/2 mb-6 animate-pulse"></div>
+                <div className="bg-white p-6 rounded-lg shadow-md space-y-6 animate-pulse">
+                    {[...Array(4)].map((_, i) => (
+                        <div key={i}>
+                            <div className="h-4 bg-gray-200 rounded w-1/4 mb-2"></div>
+                            <div className="h-10 bg-gray-200 rounded"></div>
+                        </div>
+                    ))}
+                    <div className="flex justify-end">
+                        <div className="h-10 bg-gray-200 rounded w-32"></div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="max-w-2xl mx-auto">
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Passer un nouvel ordre</h1>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Passer un nouvel ordre de souscription</h1>
             <Card>
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
-                        <label htmlFor="investmentType" className="block text-sm font-medium text-gray-700">Type d'investissement</label>
+                        <label htmlFor="investmentAccount" className="block text-sm font-medium text-gray-700">Compte d'investissement source</label>
                         <select
-                            id="investmentType"
-                            value={investmentType}
-                            onChange={(e) => setInvestmentType(e.target.value)}
+                            id="investmentAccount"
+                            value={selectedAccountId}
+                            onChange={(e) => setSelectedAccountId(e.target.value)}
+                            required
                             className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
                         >
-                            <option value="obligations">Obligations</option>
-                            <option value="sp500">Fonds S&P 500</option>
-                            <option value="actions">Actions individuelles</option>
+                            <option value="" disabled>Sélectionner un compte</option>
+                            {investmentAccounts.map(acc => (
+                                <option key={acc.accountId} value={acc.accountId}>
+                                    {acc.accountNumber} ({acc.availableBalance.toLocaleString('fr-FR', {style: 'currency', currency: acc.currency})})
+                                </option>
+                            ))}
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="amount" className="block text-sm font-medium text-gray-700">Montant à investir (USD)</label>
+                        <label htmlFor="instrument" className="block text-sm font-medium text-gray-700">Instrument financier</label>
+                        <select
+                            id="instrument"
+                            value={selectedInstrumentId}
+                            onChange={(e) => setSelectedInstrumentId(e.target.value)}
+                            required
+                            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                        >
+                            <option value="" disabled>Sélectionner un instrument</option>
+                            {availableInstruments.map(inst => (
+                                <option key={inst.instrumentId} value={inst.instrumentId}>
+                                    {inst.name} ({inst.annualYieldRate}% - Min: {inst.minInvestment} {inst.currency})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="amount" className="block text-sm font-medium text-gray-700">Montant à investir ({selectedInstrument?.currency || 'USD'})</label>
                         <input
                             type="number"
                             id="amount"
                             value={amount}
                             onChange={(e) => setAmount(e.target.value)}
                             required
-                            min="100"
+                            min={selectedInstrument?.minInvestment || 0}
                             className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="ex: 5000"
+                            placeholder={`ex: ${selectedInstrument?.minInvestment || '5000'}`}
                         />
                     </div>
-                    <div>
-                        <label htmlFor="executionDate" className="block text-sm font-medium text-gray-700">Date d'exécution souhaitée</label>
-                        <input
-                            type="date"
-                            id="executionDate"
-                            value={executionDate}
-                            onChange={(e) => setExecutionDate(e.target.value)}
-                            required
-                            min={new Date().toISOString().split("T")[0]}
-                            className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                        />
-                    </div>
+                    
                     <div>
                         <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes additionnelles</label>
                         <textarea
@@ -88,8 +130,8 @@ const NewOrderPage: React.FC = () => {
                     <div className="text-right">
                         <button
                             type="submit"
-                            disabled={isSubmitting}
-                            className="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-800 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400"
+                            disabled={isSubmitting || !selectedAccountId || !selectedInstrumentId}
+                            className="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-800 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400"
                         >
                             {isSubmitting ? 'Soumission...' : "Soumettre l'ordre"}
                         </button>
@@ -105,10 +147,10 @@ const NewOrderPage: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                             </svg>
                         </div>
-                        <h3 className="text-lg leading-6 font-medium text-gray-900 mt-4">Ordre transmis avec succès !</h3>
+                        <h3 className="text-lg leading-6 font-medium text-gray-900 mt-4">Ordre de souscription transmis !</h3>
                         <div className="mt-2 px-7 py-3">
                             <p className="text-sm text-gray-500">
-                                Votre ordre a été transmis au conseiller et au back office. Vous serez notifié lorsque l'ordre sera exécuté.
+                                Votre ordre a été transmis pour validation. Vous pouvez suivre son statut dans la page des transactions.
                             </p>
                         </div>
                         <div className="items-center px-4 py-3">

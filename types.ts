@@ -24,48 +24,156 @@ export interface Portfolio {
   totalValue: number;
   totalReturnPercentage: number;
   totalReturnAmount: number;
-  activeBondsCount: number;
+  activeSubscriptionsCount: number;
   evolution: { month: string; value: number }[];
 }
 
-export enum TransactionType {
+// --- DEPRECATED ---
+// The old simple transaction type is replaced by the new detailed one
+export enum TransactionType_DEPRECATED {
   DEPOSIT = 'Dépôt',
   WITHDRAWAL = 'Retrait',
   INVESTMENT = 'Investissement',
 }
+// --- DEPRECATED ---
 
-export enum TransactionStatus {
-  PENDING = 'En attente',
-  VALIDATED = 'Validée',
-  REJECTED = 'Rejetée',
+// --- New Detailed Data Models based on SQL Schema ---
+
+// 1. Instruments & Subscriptions
+
+export enum InstrumentStatus {
+    AVAILABLE = 'DISPONIBLE',
+    SOLD_OUT = 'EPUISE',
+    EXPIRED = 'EXPIRE'
+}
+
+export enum PaymentFrequency {
+    MONTHLY = 'MENSUEL',
+    QUARTERLY = 'TRIMESTRIEL',
+    ANNUAL = 'ANNUEL',
+    AT_MATURITY = 'A_MATURITE'
+}
+
+export interface Instrument {
+    instrumentId: number;
+    instrumentType: 'OBLIGATION' | 'ACTION' | 'FONDS';
+    code: string;
+    name: string;
+    description: string;
+    issuer: string;
+    annualYieldRate?: number | null;
+    issueDate: string;
+    maturityDate?: string | null;
+    nominalValue: number;
+    minInvestment: number;
+    currency: 'HTG' | 'USD' | 'EUR';
+    interestPaymentFrequency?: PaymentFrequency | null;
+    status: InstrumentStatus;
+}
+
+export enum SubscriptionStatus {
+    ACTIVE = 'ACTIVE',
+    MATURED = 'MATURE',
+    REDEEMED = 'RACHETEE' // Rachetée = sold before maturity
+}
+
+export interface Subscription {
+    subscriptionId: number;
+    accountId: number;
+    instrumentId: number;
+    investedAmount: number;
+    units: number;
+    subscriptionDate: string;
+    effectiveMaturityDate?: string | null;
+    rateOnSubscription: number;
+    currentValue: number;
+    accumulatedInterest: number;
+    status: SubscriptionStatus;
+}
+
+export enum InterestPaymentStatus {
+    PLANNED = 'PLANIFIE',
+    EXECUTED = 'EXECUTE',
+    FAILED = 'ECHOUE'
+}
+
+export interface InterestPayment {
+    paymentId: number;
+    subscriptionId: number;
+    paymentDate: string;
+    interestAmount: number;
+    status: InterestPaymentStatus;
+    transactionId?: number | null;
+}
+
+// 2. Client Accounts (from previous step, unchanged)
+
+export enum AccountType {
+    INVESTMENT = 'INVESTISSEMENT',
+    CASH = 'CASH',
+    EPARGNE = 'EPARGNE'
+}
+
+export enum AccountStatus {
+    ACTIVE = 'ACTIF',
+    SUSPENDED = 'SUSPENDU',
+    CLOSED = 'FERME'
+}
+
+export interface ClientAccount {
+    accountId: number;
+    accountNumber: string;
+    accountType: AccountType;
+    currency: 'HTG' | 'USD' | 'EUR';
+    balance: number;
+    availableBalance: number;
+    openingDate: string;
+    closingDate?: string | null;
+    status: AccountStatus;
+}
+
+// 3. New Detailed Transactions
+
+export enum DetailedTransactionType {
+    DEPOSIT = 'DEPOT',
+    WITHDRAWAL = 'RETRAIT',
+    SUBSCRIPTION = 'SOUSCRIPTION',
+    REDEMPTION = 'RACHAT',
+    INTEREST_PAYMENT = 'PAIEMENT_INTERET',
+    MATURITY_REIMBURSEMENT = 'REMBOURSEMENT_MATURITE',
+    TRANSFER = 'TRANSFERT'
+}
+
+export enum TransactionWorkflowStatus {
+    DRAFT = 'BROUILLON',
+    PENDING_VALIDATION = 'EN_ATTENTE_VALIDATION',
+    VALIDATED = 'VALIDEE',
+    EXECUTED = 'EXECUTEE',
+    REJECTED = 'REJETEE',
+    CANCELLED = 'ANNULEE',
+    FAILED = 'ECHOUEE'
 }
 
 export interface Transaction {
-  id: string;
-  date: string;
-  type: TransactionType;
-  description: string;
-  amount: number;
-  status: TransactionStatus;
+    transactionId: number;
+    transactionType: DetailedTransactionType;
+    sourceAccountId?: number | null;
+    destinationAccountId?: number | null;
+    amount: number;
+    currency: 'HTG' | 'USD' | 'EUR';
+    description: string;
+    status: TransactionWorkflowStatus;
+    createdBy: number; // UserID of Maker
+    creationDate: string;
+    validatedBy?: number | null; // UserID of Checker
+    validationDate?: string | null;
+    executionDate?: string | null;
+    makerComments?: string | null;
+    checkerComments?: string | null;
+    isAutomatic: boolean;
+    subscriptionId?: number | null;
 }
 
-export enum BondStatus {
-  ACTIVE = 'Active',
-  PENDING = 'En attente',
-  MATURED = 'Mature',
-  CANCELED = 'Annulée'
-}
-
-export interface Bond {
-  id: string;
-  name: string;
-  investedAmount: number;
-  yieldRate: number;
-  subscriptionDate: string;
-  maturityDate: string;
-  expectedReturn: number;
-  status: BondStatus;
-}
 
 export interface ChatMessage {
     id: number;
@@ -74,10 +182,14 @@ export interface ChatMessage {
     suggestions?: string[];
 }
 
-// Structure for account-specific data
+
+// --- Updated UserData Structure ---
+
 export interface UserData {
     user: User;
     portfolio: Portfolio;
-    bonds: Bond[];
+    accounts: ClientAccount[];
+    subscriptions: Subscription[];
     transactions: Transaction[];
+    instruments: Instrument[]; // List of all available instruments
 }
