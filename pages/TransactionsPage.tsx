@@ -26,6 +26,65 @@ const formatStatus = (status: TransactionWorkflowStatus) => {
 
 const ITEMS_PER_PAGE = 10;
 
+// New component for mobile view
+const TransactionCard: React.FC<{ tx: Transaction; getAccountNumber: (id: number | null | undefined) => string; }> = ({ tx, getAccountNumber }) => {
+    const isPositive = [DetailedTransactionType.DEPOSIT, DetailedTransactionType.INTEREST_PAYMENT, DetailedTransactionType.MATURITY_REIMBURSEMENT].includes(tx.transactionType);
+    const amount = isPositive ? tx.amount : -tx.amount;
+
+    return (
+        <Card>
+            <div className="flex justify-between items-start gap-2">
+                <p className="font-bold text-gray-900 flex-1 pr-2">{tx.description}</p>
+                <span className={`flex-shrink-0 px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full capitalize ${getStatusBadgeColor(tx.status)}`}>
+                    {formatStatus(tx.status)}
+                </span>
+            </div>
+            <div className="mt-2 text-sm text-gray-500">
+                {new Date(tx.creationDate).toLocaleDateString('fr-FR')}
+            </div>
+            <div className="mt-4 border-t pt-4">
+                <p className={`text-lg font-bold text-right ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                    {amount.toLocaleString('fr-FR', { style: 'currency', currency: tx.currency })}
+                </p>
+                <div className="mt-2 text-xs text-gray-500 font-mono space-y-1">
+                    <div className="flex justify-between">
+                        <span>Source:</span>
+                        <span>{getAccountNumber(tx.sourceAccountId)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span>Destination:</span>
+                        <span>{getAccountNumber(tx.destinationAccountId)}</span>
+                    </div>
+                </div>
+            </div>
+        </Card>
+    );
+};
+
+// New skeleton for mobile card view
+const SkeletonMobileCard: React.FC = () => (
+    <Card className="animate-pulse">
+        <div className="flex justify-between items-start">
+            <div className="h-5 bg-gray-200 rounded w-3/4"></div>
+            <div className="h-6 bg-gray-200 rounded-full w-20"></div>
+        </div>
+        <div className="mt-2 h-4 bg-gray-200 rounded w-1/4"></div>
+        <div className="mt-4 border-t pt-4">
+            <div className="h-7 bg-gray-200 rounded w-1/3 ml-auto"></div>
+            <div className="mt-4 space-y-2">
+                <div className="flex justify-between">
+                    <div className="h-3 bg-gray-200 rounded w-1/5"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                </div>
+                <div className="flex justify-between">
+                    <div className="h-3 bg-gray-200 rounded w-1/5"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                </div>
+            </div>
+        </div>
+    </Card>
+);
+
 const TransactionsPage: React.FC = () => {
     const { transactions, isLoadingData, accounts } = useAuth();
     const [searchTerm, setSearchTerm] = useState('');
@@ -98,53 +157,67 @@ const TransactionsPage: React.FC = () => {
                 </div>
             </Card>
 
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Compte Source</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Compte Dest.</th>
-                            <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
-                            <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {isLoadingData ? (
-                            Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => <SkeletonRow key={i} />)
-                        ) : (
-                            paginatedTransactions.map((tx) => {
-                                const isPositive = [DetailedTransactionType.DEPOSIT, DetailedTransactionType.INTEREST_PAYMENT, DetailedTransactionType.MATURITY_REIMBURSEMENT].includes(tx.transactionType);
-                                const amount = isPositive ? tx.amount : -tx.amount;
-                                return (
-                                <tr key={tx.transactionId} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(tx.creationDate).toLocaleDateString('fr-FR')}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{tx.description}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{getAccountNumber(tx.sourceAccountId)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{getAccountNumber(tx.destinationAccountId)}</td>
-                                    <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                                        {amount.toLocaleString('fr-FR', { style: 'currency', currency: tx.currency })}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full capitalize ${getStatusBadgeColor(tx.status)}`}>
-                                            {formatStatus(tx.status)}
-                                        </span>
-                                    </td>
-                                </tr>
-                            )})
-                        )}
-                    </tbody>
-                </table>
+            {/* Desktop Table View */}
+            <div className="hidden lg:block bg-white rounded-lg shadow-md overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Compte Source</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Compte Dest.</th>
+                                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
+                                <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {isLoadingData ? (
+                                Array.from({ length: ITEMS_PER_PAGE }).map((_, i) => <SkeletonRow key={i} />)
+                            ) : (
+                                paginatedTransactions.map((tx) => {
+                                    const isPositive = [DetailedTransactionType.DEPOSIT, DetailedTransactionType.INTEREST_PAYMENT, DetailedTransactionType.MATURITY_REIMBURSEMENT].includes(tx.transactionType);
+                                    const amount = isPositive ? tx.amount : -tx.amount;
+                                    return (
+                                    <tr key={tx.transactionId} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(tx.creationDate).toLocaleDateString('fr-FR')}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{tx.description}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{getAccountNumber(tx.sourceAccountId)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{getAccountNumber(tx.destinationAccountId)}</td>
+                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                            {amount.toLocaleString('fr-FR', { style: 'currency', currency: tx.currency })}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full capitalize ${getStatusBadgeColor(tx.status)}`}>
+                                                {formatStatus(tx.status)}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                )})
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="lg:hidden space-y-4">
+                {isLoadingData ? (
+                    Array.from({ length: 5 }).map((_, i) => <SkeletonMobileCard key={i} />)
+                ) : (
+                    paginatedTransactions.map((tx) => (
+                        <TransactionCard key={tx.transactionId} tx={tx} getAccountNumber={getAccountNumber} />
+                    ))
+                )}
             </div>
 
             {!isLoadingData && paginatedTransactions.length === 0 && <p className="text-gray-500 text-center">Aucune transaction trouvée.</p>}
             
             {totalPages > 1 && (
                  <div className="flex justify-center items-center space-x-2 mt-6">
-                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 rounded-md bg-white border disabled:opacity-50">Précédent</button>
-                    <span className="text-sm">Page {currentPage} sur {totalPages}</span>
-                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 rounded-md bg-white border disabled:opacity-50">Suivant</button>
+                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 rounded-md bg-white border disabled:opacity-50 hover:bg-gray-50 transition-colors">Précédent</button>
+                    <span className="text-sm text-gray-700">Page {currentPage} sur {totalPages}</span>
+                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-4 py-2 rounded-md bg-white border disabled:opacity-50 hover:bg-gray-50 transition-colors">Suivant</button>
                 </div>
             )}
         </div>
