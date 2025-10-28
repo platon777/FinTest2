@@ -1,0 +1,115 @@
+Date : 27 octobre 2025, 14:35
+Type opération : DÉPÔT
+Compte : #456 (Monsieur Duval)
+Montant : 10,000 HTG
+Source : Espèces
+Solde avant : 25,000 HTG
+Solde après : 35,000 HTG
+Effectué par : Jean (employé #12)
+Lieu : Agence Pétion-Ville
+Numéro reçu : DEP-2025-00789
+```
+
+**💡 Concept clé : TRAÇABILITÉ COMPLÈTE**
+
+Chaque transaction doit répondre aux **6W** :
+- **Who** (Qui) : Quel client ? Quel employé ?
+- **What** (Quoi) : Quel type d'opération ?
+- **When** (Quand) : Date et heure précise
+- **Where** (Où) : Quelle agence/canal ?
+- **How much** (Combien) : Montant exact
+- **Why** (Pourquoi) : Motif/description
+
+**Pourquoi c'est crucial ?**
+- **Audit** : Les régulateurs peuvent retracer n'importe quelle transaction
+- **Litiges** : Si le client conteste, on a la preuve
+- **Fraude** : On peut détecter des patterns suspects
+- **Conformité** : Obligation légale de garder l'historique (5-10 ans)
+
+---
+
+## 📝 Réponse Scénario 2 : Le système Maker/Checker expliqué
+
+**Le problème :** Si Jean écrit directement dans le grand livre, il peut :
+- Faire des erreurs involontaires (100,000 au lieu de 10,000)
+- Commettre des fraudes (créditer son propre compte)
+- Être sous pression et bâcler son travail
+
+**La solution : Séparation des pouvoirs**
+```
+┌─────────────────────────────────────────────────────────┐
+│                  FLUX MAKER/CHECKER                      │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  1. MAKER (Jean - Employé)                              │
+│     ├─ Reçoit le client                                 │
+│     ├─ Vérifie les documents                            │
+│     ├─ Saisit la transaction                            │
+│     └─ Soumet pour VALIDATION                           │
+│                      ↓                                   │
+│  Transaction passe en statut: EN_ATTENTE_VALIDATION     │
+│                      ↓                                   │
+│  2. CHECKER (Marie - Superviseur)                       │
+│     ├─ Examine la transaction                           │
+│     ├─ Vérifie les montants                             │
+│     ├─ Compare avec les documents originaux             │
+│     ├─ Vérifie les limites/règles                       │
+│     └─ Décision:                                        │
+│          ├─ APPROUVE → Transaction exécutée             │
+│          └─ REJETTE → Transaction annulée               │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+**💡 Concept clé : DUAL CONTROL (Contrôle dual)**
+
+**Règle d'or :** 
+> "Celui qui CRÉE ne peut JAMAIS être celui qui VALIDE"
+
+**Avantages :**
+1. **Réduit les erreurs** : Deux paires d'yeux voient mieux qu'une
+2. **Prévient la fraude** : Jean ne peut pas s'auto-approuver une transaction frauduleuse
+3. **Responsabilité** : Si erreur, on sait qui a créé ET qui a validé
+4. **Conformité réglementaire** : Exigé par la plupart des banques centrales
+
+**Seuils typiques :**
+- Transaction < 10,000 HTG → Validation automatique OU simple checker
+- Transaction 10,000-100,000 HTG → Checker obligatoire
+- Transaction > 100,000 HTG → Double validation (2 checkers)
+- Transaction > 1,000,000 HTG → Validation directeur + chef des opérations
+
+---
+
+## 📝 Réponse Scénario 3 : Pourquoi l'argent du client est une DETTE ?
+
+C'est contre-intuitif mais **FONDAMENTAL** en comptabilité bancaire !
+
+### L'analogie simple : Le parking de voitures
+
+Imaginez que vous gérez un parking :
+```
+Client arrive avec sa voiture Ferrari (valeur 500,000 HTG)
+Vous lui donnez un ticket
+
+Question : Cette Ferrari vous appartient-elle ?
+Réponse : NON ! Vous devez la RENDRE au client quand il revient.
+```
+
+**C'est EXACTEMENT pareil avec l'argent à la banque !**
+
+### Quand Monsieur Duval dépose 10,000 HTG :
+```
+┌──────────────────────────────────────────────────────┐
+│          POINT DE VUE DE LA BANQUE                   │
+├──────────────────────────────────────────────────────┤
+│                                                       │
+│  ACTIF (Ce que la banque POSSÈDE)                   │
+│  ├─ Caisse : +10,000 HTG (argent physique)          │
+│  │                                                    │
+│  PASSIF (Ce que la banque DOIT)                      │
+│  ├─ Dépôts clients : +10,000 HTG                     │
+│  │   (dette envers Monsieur Duval)                   │
+│                                                       │
+│  Bilan équilibré : ACTIF = PASSIF                    │
+│                                                       │
+└──────────────────────────────────────────────────────┘
