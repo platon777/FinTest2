@@ -61,11 +61,11 @@ class DashboardService {
   async getOverview(compteId?: number): Promise<DashboardOverview> {
     try {
       const params = compteId ? { compte_id: compteId } : {};
-      const response = await httpClient.get<{ success: boolean; data: DashboardOverview }>(
+      const response = await httpClient.get<DashboardOverview>(
         '/dashboard/overview',
         { params }
       );
-      return response.data.data;
+      return response.data;
     } catch (error) {
       throw new Error(handleApiError(error));
     }

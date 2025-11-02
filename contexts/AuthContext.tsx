@@ -132,16 +132,16 @@ const convertInstrument = (inst: any): Instrument => ({
 });
 
 const convertDashboardToPortfolio = (
-  overview: DashboardOverview,
+  overview: any,
   monthlyStats: any[]
 ): Portfolio => ({
-  totalValue: overview.valeurTotale,
-  totalReturnPercentage: overview.pourcentageRendement,
-  totalReturnAmount: overview.rendementTotal,
-  activeSubscriptionsCount: overview.nombreSouscriptionsActives,
+  totalValue: parseFloat(overview.valeur_totale || overview.valeurTotale || 0),
+  totalReturnPercentage: parseFloat(overview.pourcentage_rendement || overview.pourcentageRendement || 0),
+  totalReturnAmount: parseFloat(overview.rendement_total || overview.rendementTotal || 0),
+  activeSubscriptionsCount: parseInt(overview.nombre_souscriptions_actives || overview.nombreSouscriptionsActives || 0, 10),
   evolution: monthlyStats.map((stat) => ({
     month: stat.mois,
-    value: stat.valeurPortefeuille,
+    value: parseFloat(stat.valeur_portefeuille || stat.valeurPortefeuille || 0),
   })),
 });
 
@@ -292,6 +292,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const accountId = parseInt(activeAccount.id, 10);
+      console.log('🔄 Refreshing data for account ID:', accountId);
+
       const [overview, subs, txs, insts, monthlyStats] = await Promise.all([
         dashboardService.getOverview(accountId),
         souscriptionsService.getMesSouscriptions(),
@@ -300,11 +302,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         dashboardService.getMonthlyStatistics(accountId, 12),
       ]);
 
-      setDashboardOverview(overview);
-      setPortfolio(convertDashboardToPortfolio(overview, monthlyStats));
-      setSubscriptions(subs.map(convertSubscription));
-      setTransactions(txs.map(convertTransaction));
-      setInstruments(insts.map(convertInstrument));
+      console.log('✅ Overview received:', overview);
+      console.log('📊 Monthly Stats received:', monthlyStats);
+
+      // Null checks before using the data
+      if (overview) {
+        const portfolio = convertDashboardToPortfolio(overview, monthlyStats || []);
+        console.log('📊 Converted Portfolio:', portfolio);
+        setDashboardOverview(overview);
+        setPortfolio(portfolio);
+      } else {
+        console.warn('⚠️ Overview is null or undefined');
+      }
+
+      if (subs && Array.isArray(subs)) {
+        setSubscriptions(subs.map(convertSubscription));
+      }
+
+      if (txs && Array.isArray(txs)) {
+        setTransactions(txs.map(convertTransaction));
+      }
+
+      if (insts && Array.isArray(insts)) {
+        setInstruments(insts.map(convertInstrument));
+      }
     } catch (error: any) {
       console.error('Failed to refresh data:', error);
       setError(error.message || 'Failed to refresh data');
