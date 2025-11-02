@@ -1,9 +1,28 @@
+// Authentication types
+export interface AuthTokens {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
+export interface AuthUser {
+  client_id: number;
+  email: string;
+  client_type: 'INDIVIDUEL' | 'INSTITUTIONNEL';
+  prenom?: string;
+  nom?: string;
+  nom_entreprise?: string;
+  statut_client?: 'ACTIF' | 'SUSPENDU' | 'FERME';
+}
+
 export interface SwitchableAccount {
     id: string;
     name: string;
     type: 'Personnel' | 'Entreprise';
 }
 
+// User Profile (legacy - for compatibility)
 export interface User {
   id: string;
   name: string;
@@ -20,12 +39,95 @@ export interface User {
   associatedAccounts?: SwitchableAccount[];
 }
 
+// Complete Client Profile (from backend vw_ProfilClient)
+export interface ClientProfil {
+  clientId: number;
+  clientType: 'INDIVIDUEL' | 'INSTITUTIONNEL';
+  nomComplet?: string;
+  email: string;
+  telephone?: string;
+  adresse?: {
+    ligne1?: string;
+    ligne2?: string;
+    ville?: string;
+    codePostal?: string;
+    pays?: string;
+  };
+  // For individual client
+  prenom?: string;
+  nom?: string;
+  dateNaissance?: string;
+  nationalite?: string;
+  typePieceIdentite?: string;
+  numeroPieceIdentite?: string;
+  profession?: string;
+  sourceRevenus?: string;
+  // For institutional client
+  nomEntreprise?: string;
+  numeroRegistreCommerce?: string;
+  formeJuridique?: string;
+  secteur?: string;
+  dateCreationEntreprise?: string;
+  chiffreAffairesAnnuel?: number;
+  nomRepresentantLegal?: string;
+  // Investor profile
+  profilInvestisseur?: {
+    niveauRisque?: 'CONSERVATEUR' | 'MODERE' | 'AGRESSIF';
+    revenuAnnuel?: number;
+  };
+}
+
 export interface Portfolio {
   totalValue: number;
   totalReturnPercentage: number;
   totalReturnAmount: number;
   activeSubscriptionsCount: number;
   evolution: { month: string; value: number }[];
+}
+
+// Dashboard types (from backend)
+export interface DashboardOverview {
+  valeurTotale: number;
+  rendementTotal: number;
+  pourcentageRendement: number;
+  nombreSouscriptionsActives: number;
+  totalInvesti: number;
+  devise: string;
+  comptes?: Array<{
+    compteId: number;
+    numeroCompte: string;
+    valeur: number;
+  }>;
+}
+
+export interface RecentTransaction {
+  transactionId: number;
+  typeTransaction: string;
+  description: string;
+  montant: number;
+  devise: string;
+  dateCreation: string;
+  statut: string;
+  compteSource: string | null;
+  compteDestination: string | null;
+}
+
+export interface ActiveInvestment {
+  souscriptionId: number;
+  nomInstrument: string;
+  codeInstrument: string;
+  montantInvesti: number;
+  valeurActuelle: number;
+  tauxSouscription: number;
+  dateMaturite: string;
+  progressionMaturite: number;
+}
+
+export interface MonthlyStatistic {
+  mois: string;
+  dateMois: string;
+  valeurPortefeuille: number;
+  nombreSouscriptions: number;
 }
 
 // --- DEPRECATED ---

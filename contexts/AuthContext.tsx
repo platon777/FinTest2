@@ -1,156 +1,362 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { User, SwitchableAccount, Portfolio, Subscription, Transaction, ClientAccount, Instrument } from '../types';
-import * as apiService from '../services/apiService';
-import { mockDatabase } from '../data/mock';
+import {
+  User,
+  AuthUser,
+  SwitchableAccount,
+  Portfolio,
+  Subscription,
+  Transaction,
+  ClientAccount,
+  Instrument,
+  DashboardOverview,
+} from '../types';
+import { authService } from '../services/authService';
+import { userService } from '../services/userService';
+import { dashboardService } from '../services/dashboardService';
+import { souscriptionsService } from '../services/souscriptionsService';
+import { transactionsService } from '../services/transactionsService';
+import { comptesService } from '../services/comptesService';
+import { instrumentsService } from '../services/instrumentsService';
 
 interface AuthContextType {
   loggedInUser: User | null;
+  authUser: AuthUser | null;
   displayedUser: User | null;
   portfolio: Portfolio | null;
+  dashboardOverview: DashboardOverview | null;
   subscriptions: Subscription[];
   transactions: Transaction[];
   accounts: ClientAccount[];
   instruments: Instrument[];
   isLoadingData: boolean;
+  error: string | null;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   activeAccount: SwitchableAccount | null;
   availableAccounts: SwitchableAccount[];
   switchAccount: (accountId: string) => void;
+  refreshData: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const LOGOUT_TIMER = 15 * 60 * 1000; // 15 minutes
 
+// Helper functions outside component
+const convertAuthUserToUser = (authUser: AuthUser, accounts: ClientAccount[]): User => {
+  const fullName = authUser.client_type === 'INDIVIDUEL'
+    ? `${authUser.prenom || ''} ${authUser.nom || ''}`.trim()
+    : authUser.nom_entreprise || '';
+
+  return {
+    id: authUser.client_id.toString(),
+    name: fullName,
+    email: authUser.email,
+    clientType: authUser.client_type === 'INDIVIDUEL' ? 'Individuel' : 'Institutionnel',
+    phone: '',
+    address: '',
+    investorProfile: {
+      type: authUser.client_type === 'INDIVIDUEL' ? 'Personne physique' : 'Personne morale',
+      riskLevel: 'Modéré',
+      investmentHorizon: 'Moyen terme',
+    },
+    associatedAccounts: accounts.map((acc) => ({
+      id: acc.accountId.toString(),
+      name: acc.accountNumber,
+      type: authUser.client_type === 'INDIVIDUEL' ? 'Personnel' : 'Entreprise',
+    })),
+  };
+};
+
+const convertSubscription = (sub: any): Subscription => ({
+  subscriptionId: sub.SouscriptionID,
+  accountId: sub.CompteID,
+  instrumentId: sub.InstrumentID,
+  investedAmount: sub.MontantInvesti,
+  units: sub.NombreUnites,
+  subscriptionDate: sub.DateSouscription,
+  effectiveMaturityDate: sub.DateMaturiteEffective,
+  rateOnSubscription: sub.TauxSouscription,
+  currentValue: sub.ValeurActuelle,
+  accumulatedInterest: sub.InteretsAccumules,
+  status: sub.StatutSouscription,
+});
+
+const convertTransaction = (tx: any): Transaction => ({
+  transactionId: tx.TransactionID,
+  transactionType: tx.TypeTransaction,
+  sourceAccountId: tx.CompteSource || null,
+  destinationAccountId: tx.CompteDestination || null,
+  amount: tx.Montant,
+  currency: tx.Devise,
+  description: tx.Description || '',
+  status: tx.StatutTransaction,
+  createdBy: 0,
+  creationDate: tx.DateCreation,
+  validatedBy: null,
+  validationDate: null,
+  executionDate: tx.DateExecution || null,
+  makerComments: null,
+  checkerComments: null,
+  isAutomatic: tx.EstAutomatique || false,
+  subscriptionId: tx.SouscriptionID || null,
+});
+
+const convertAccount = (acc: any): ClientAccount => ({
+  accountId: acc.CompteID,
+  accountNumber: acc.NumeroCompte,
+  accountType: acc.TypeCompte,
+  currency: acc.Devise,
+  balance: acc.Solde,
+  availableBalance: acc.SoldeDisponible,
+  openingDate: acc.DateOuverture,
+  closingDate: acc.DateFermeture || null,
+  status: acc.StatutCompte,
+});
+
+const convertInstrument = (inst: any): Instrument => ({
+  instrumentId: inst.InstrumentID,
+  instrumentType: 'OBLIGATION',
+  code: inst.Code,
+  name: inst.Nom,
+  description: inst.Description || '',
+  issuer: inst.Emetteur,
+  annualYieldRate: inst.TauxRendementAnnuel,
+  issueDate: inst.DateEmission,
+  maturityDate: inst.DateMaturite,
+  nominalValue: inst.ValeurNominale,
+  minInvestment: inst.MontantMinimum,
+  currency: inst.Devise,
+  interestPaymentFrequency: inst.FrequencePaiementInterets,
+  status: inst.StatutInstrument,
+});
+
+const convertDashboardToPortfolio = (
+  overview: DashboardOverview,
+  monthlyStats: any[]
+): Portfolio => ({
+  totalValue: overview.valeurTotale,
+  totalReturnPercentage: overview.pourcentageRendement,
+  totalReturnAmount: overview.rendementTotal,
+  activeSubscriptionsCount: overview.nombreSouscriptionsActives,
+  evolution: monthlyStats.map((stat) => ({
+    month: stat.mois,
+    value: stat.valeurPortefeuille,
+  })),
+});
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [loggedInUser, setLoggedInUser] = useState<User | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [displayedUser, setDisplayedUser] = useState<User | null>(null);
   const [activeAccount, setActiveAccount] = useState<SwitchableAccount | null>(null);
-  
+
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [dashboardOverview, setDashboardOverview] = useState<DashboardOverview | null>(null);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<ClientAccount[]>([]);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const logout = useCallback(() => {
-    setLoggedInUser(null);
-    setDisplayedUser(null);
-    setActiveAccount(null);
-    setPortfolio(null);
-    setSubscriptions([]);
-    setTransactions([]);
-    setAccounts([]);
-    setInstruments([]);
+  const logout = useCallback(async () => {
+    try {
+      await authService.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setLoggedInUser(null);
+      setAuthUser(null);
+      setDisplayedUser(null);
+      setActiveAccount(null);
+      setPortfolio(null);
+      setDashboardOverview(null);
+      setSubscriptions([]);
+      setTransactions([]);
+      setAccounts([]);
+      setInstruments([]);
+      setError(null);
+    }
   }, []);
-  
+
   const resetTimeout = useCallback(() => {
     const timer = setTimeout(logout, LOGOUT_TIMER);
     return () => clearTimeout(timer);
   }, [logout]);
-  
-  useEffect(() => {
-    if (loggedInUser) {
-        let clearTimer = resetTimeout();
-        const activityEvents = ['mousemove', 'keydown', 'scroll', 'click'];
-        const activityHandler = () => {
-            clearTimer();
-            clearTimer = resetTimeout();
-        };
-        activityEvents.forEach(event => window.addEventListener(event, activityHandler));
-        return () => {
-            clearTimer();
-            activityEvents.forEach(event => window.removeEventListener(event, activityHandler));
-        };
-    }
-  }, [loggedInUser, resetTimeout]);
 
-  // Fetch data when active account changes
   useEffect(() => {
-    if (activeAccount) {
-        const fetchDataForAccount = async () => {
-            setIsLoadingData(true);
-            try {
-                const [userData, portfolioData, subscriptionsData, transactionsData, accountsData, instrumentsData] = await Promise.all([
-                    apiService.getUserData(activeAccount.id),
-                    apiService.getPortfolio(activeAccount.id),
-                    apiService.getSubscriptions(activeAccount.id),
-                    apiService.getTransactions(activeAccount.id),
-                    apiService.getAccounts(activeAccount.id),
-                    apiService.getInstruments(activeAccount.id)
-                ]);
-                setDisplayedUser(userData);
-                setPortfolio(portfolioData);
-                setSubscriptions(subscriptionsData);
-                setTransactions(transactionsData);
-                setAccounts(accountsData);
-                setInstruments(instrumentsData);
-            } catch (error) {
-                console.error("Failed to fetch account data:", error);
-            } finally {
-                setIsLoadingData(false);
-            }
-        };
-        fetchDataForAccount();
+    if (authUser) {
+      let clearTimer = resetTimeout();
+      const activityEvents = ['mousemove', 'keydown', 'scroll', 'click'];
+      const activityHandler = () => {
+        clearTimer();
+        clearTimer = resetTimeout();
+      };
+      activityEvents.forEach((event) => window.addEventListener(event, activityHandler));
+      return () => {
+        clearTimer();
+        activityEvents.forEach((event) => window.removeEventListener(event, activityHandler));
+      };
     }
-  }, [activeAccount]);
+  }, [authUser, resetTimeout]);
 
   const login = async (email: string, password: string): Promise<void> => {
-    // Simulate API call for login
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        if (email === 'jean.dupont@email.com' && password === 'password123') {
-          const mainUserData = mockDatabase['user-1'].user;
-          setLoggedInUser(mainUserData);
-          // Set the primary user as the initial active account
+    setError(null);
+    setIsLoadingData(true);
+
+    try {
+      const response = await authService.login({ email, password });
+
+      if (response.success) {
+        setAuthUser(response.client);
+
+        // Load user data
+        const currentUser = await userService.getCurrentUser();
+
+        // Load accounts
+        const accountsData = await comptesService.getMesComptes('ACTIF');
+        const convertedAccounts = accountsData.map(convertAccount);
+        setAccounts(convertedAccounts);
+
+        // Convert auth user to User format
+        const user = convertAuthUserToUser(
+          {
+            client_id: currentUser.client_id,
+            email: currentUser.email,
+            client_type: currentUser.client_type,
+            prenom: currentUser.prenom,
+            nom: currentUser.nom,
+          },
+          convertedAccounts
+        );
+        setLoggedInUser(user);
+        setDisplayedUser(user);
+
+        // Set the first account as active
+        if (convertedAccounts.length > 0) {
+          const firstAccount = convertedAccounts[0];
           setActiveAccount({
-              id: mainUserData.id,
-              name: mainUserData.name,
-              type: 'Personnel',
+            id: firstAccount.accountId.toString(),
+            name: firstAccount.accountNumber,
+            type: currentUser.client_type === 'INDIVIDUEL' ? 'Personnel' : 'Entreprise',
           });
-          resolve();
-        } else {
-          reject(new Error("Invalid credentials"));
+
+          // Load data for the first account
+          const [overview, subs, txs, insts, monthlyStats] = await Promise.all([
+            dashboardService.getOverview(firstAccount.accountId),
+            souscriptionsService.getMesSouscriptions(),
+            transactionsService.getMesTransactions(100),
+            instrumentsService.getInstrumentsDisponibles(),
+            dashboardService.getMonthlyStatistics(firstAccount.accountId, 12),
+          ]);
+
+          setDashboardOverview(overview);
+          setPortfolio(convertDashboardToPortfolio(overview, monthlyStats));
+          setSubscriptions(subs.map(convertSubscription));
+          setTransactions(txs.map(convertTransaction));
+          setInstruments(insts.map(convertInstrument));
         }
-      }, 1000);
-    });
+      } else {
+        throw new Error(response.message || 'Login failed');
+      }
+    } catch (error: any) {
+      setError(error.message || 'Login failed');
+      throw error;
+    } finally {
+      setIsLoadingData(false);
+    }
   };
 
   const switchAccount = (accountId: string) => {
     if (!loggedInUser) return;
     const allAccounts = [
-        { id: loggedInUser.id, name: loggedInUser.name, type: 'Personnel' as 'Personnel' | 'Entreprise' },
-        ...(loggedInUser.associatedAccounts || [])
+      {
+        id: loggedInUser.id,
+        name: loggedInUser.name,
+        type: 'Personnel' as 'Personnel' | 'Entreprise',
+      },
+      ...(loggedInUser.associatedAccounts || []),
     ];
-    const newAccount = allAccounts.find(acc => acc.id === accountId);
+    const newAccount = allAccounts.find((acc) => acc.id === accountId);
     if (newAccount) {
-        setActiveAccount(newAccount);
+      setActiveAccount(newAccount);
     }
   };
 
-  const availableAccounts = useMemo(() => (
-    loggedInUser ? [
-        { id: loggedInUser.id, name: loggedInUser.name, type: (loggedInUser.clientType === 'Individuel' ? 'Personnel' : 'Entreprise') as 'Personnel' | 'Entreprise' },
-        ...(loggedInUser.associatedAccounts || [])
-    ] : []
-  ), [loggedInUser]);
+  const refreshData = async () => {
+    if (!activeAccount) return;
 
-  const value = { 
+    setIsLoadingData(true);
+    setError(null);
+
+    try {
+      const accountId = parseInt(activeAccount.id, 10);
+      const [overview, subs, txs, insts, monthlyStats] = await Promise.all([
+        dashboardService.getOverview(accountId),
+        souscriptionsService.getMesSouscriptions(),
+        transactionsService.getMesTransactions(100),
+        instrumentsService.getInstrumentsDisponibles(),
+        dashboardService.getMonthlyStatistics(accountId, 12),
+      ]);
+
+      setDashboardOverview(overview);
+      setPortfolio(convertDashboardToPortfolio(overview, monthlyStats));
+      setSubscriptions(subs.map(convertSubscription));
+      setTransactions(txs.map(convertTransaction));
+      setInstruments(insts.map(convertInstrument));
+    } catch (error: any) {
+      console.error('Failed to refresh data:', error);
+      setError(error.message || 'Failed to refresh data');
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  // Load data when active account changes
+  useEffect(() => {
+    if (activeAccount && authUser) {
+      refreshData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAccount?.id, authUser?.client_id]);
+
+  const availableAccounts = useMemo(
+    () =>
+      loggedInUser
+        ? [
+            {
+              id: loggedInUser.id,
+              name: loggedInUser.name,
+              type:
+                loggedInUser.clientType === 'Individuel'
+                  ? ('Personnel' as 'Personnel' | 'Entreprise')
+                  : ('Entreprise' as 'Personnel' | 'Entreprise'),
+            },
+            ...(loggedInUser.associatedAccounts || []),
+          ]
+        : [],
+    [loggedInUser]
+  );
+
+  const value = {
     loggedInUser,
+    authUser,
     displayedUser,
     portfolio,
+    dashboardOverview,
     subscriptions,
     transactions,
     accounts,
     instruments,
     isLoadingData,
-    login, 
-    logout, 
-    activeAccount, 
-    availableAccounts, 
-    switchAccount 
+    error,
+    login,
+    logout,
+    activeAccount,
+    availableAccounts,
+    switchAccount,
+    refreshData,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
