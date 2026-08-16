@@ -128,9 +128,9 @@ function statusLabel(status: string) {
     RACHETEE: "Rachetée",
     FAILED: "Échec",
     SUBMITTED: "Soumis",
-    COMPLIANCE_REVIEW: "Contrôle conformité",
-    BACK_OFFICE_REVIEW: "Contrôle back-office",
-    READY_FOR_CHECKER: "Prêt pour checker",
+    COMPLIANCE_REVIEW: "Vérification en cours",
+    BACK_OFFICE_REVIEW: "Traitement en cours",
+    READY_FOR_CHECKER: "Dernière validation",
     CANCELLED: "Annulé",
   };
   return labels[status] || status.replaceAll("_", " ");
@@ -149,6 +149,16 @@ function transactionLabel(type: string) {
       } as Record<string, string>
     )[type] || type
   );
+}
+
+function workflowStepLabel(step: string) {
+  return (
+    {
+      CONFORMITE: "Vérification du dossier",
+      BACK_OFFICE: "Traitement de la demande",
+      CHECKER: "Validation finale",
+    } as Record<string, string>
+  )[step] || step.replaceAll("_", " ");
 }
 
 function Sparkline({ positive = true }: { positive?: boolean }) {
@@ -218,12 +228,6 @@ function LoginScreen({ onLogin, notice = "" }: { onLogin: (session: AuthSession)
         <p>
           Consultez vos comptes, soumettez vos ordres et suivez chaque étape de validation.
         </p>
-        <div className="auth-visual-footer">
-          <span className="status-live">
-            <i /> Services disponibles
-          </span>
-          <span>Accès contrôlé</span>
-        </div>
       </section>
       <section className="auth-panel">
         <div className="auth-panel-inner">
@@ -300,8 +304,7 @@ function LoginScreen({ onLogin, notice = "" }: { onLogin: (session: AuthSession)
             ))}
           </div>
           <div className="auth-note">
-            <Icon name="shield" size={15} /> Les opérations de démonstration
-            sont isolées du réel.
+            <Icon name="shield" size={15} /> Votre espace personnel ProFin.
           </div>
         </div>
       </section>
@@ -338,7 +341,7 @@ function Shell({
       label: "Flux de trésorerie",
       icon: "swap" as const,
     },
-    { id: "accounts" as Page, label: "Mes comptes", icon: "wallet" as const },
+    { id: "accounts" as Page, label: "Comptes", icon: "wallet" as const },
     ...(canAccessBackOffice ? [{ id: "backoffice" as Page, label: "Pilotage opérationnel", icon: "building" as const }] : []),
   ];
   const go = (next: Page) => {
@@ -357,14 +360,6 @@ function Shell({
           >
             <Icon name="close" />
           </button>
-        </div>
-        <div className="workspace-switch">
-          <span className="workspace-dot" />
-          <span>
-            <small>Environnement</small>
-            <strong>Démonstration locale</strong>
-          </span>
-          <Icon name="chevron" size={15} />
         </div>
         <nav className="main-nav" aria-label="Navigation principale">
           <span className="nav-label">Pilotage</span>
@@ -391,19 +386,9 @@ function Shell({
           </button>
         </nav>
         <div className="sidebar-bottom">
-          <div className="security-card">
-            <Icon name="shield" size={20} />
-            <div>
-              <strong>Accès contrôlé</strong>
-              <small>Session chiffrée</small>
-            </div>
-          </div>
           <button className="logout-button" onClick={onLogout}>
             <Icon name="logout" size={18} /> Déconnexion
           </button>
-          <div className="sidebar-meta">
-            PROFIN CORE <span>v2.0.0</span>
-          </div>
         </div>
       </aside>
       <div className="mobile-backdrop" onClick={() => setMobileOpen(false)} />
@@ -420,16 +405,11 @@ function Shell({
             <ProFinLogo className="profin-logo-topbar-mobile" />
           </div>
           <div className="breadcrumbs">
-            <span>Console</span>
-            <Icon name="chevron" size={14} />
             <strong>
               {nav.find((item) => item.id === page)?.label || "Mon profil"}
             </strong>
           </div>
           <div className="topbar-actions">
-            <div className="core-status">
-              <i /> <span>Services disponibles</span>
-            </div>
             <button className="icon-button" onClick={onToggleTheme} aria-label={theme === "light" ? "Activer le mode sombre" : "Activer le mode clair"} title={theme === "light" ? "Mode sombre" : "Mode clair"}>
               <Icon name={theme === "light" ? "moon" : "sun"} size={18} />
             </button>
@@ -545,7 +525,7 @@ function DashboardPage({
         <Metric
           label="Flux à traiter"
           value={String(pending.length).padStart(2, "0")}
-          helper="Validation maker / checker"
+          helper="Demandes en cours de validation"
           icon="swap"
         />
       </div>
@@ -720,7 +700,7 @@ function ClientReportPanels({ report }: { report: ClientBusinessReport | null })
   return (
     <div className="report-grid">
       <section className="panel report-panel report-currency-panel">
-        <SectionHeader eyebrow="Lecture patrimoniale" title="Un suivi par devise" description="Les montants restent séparés pour éviter de mélanger USD et HTG." />
+        <SectionHeader eyebrow="Votre patrimoine" title="Un suivi par devise" description="Retrouvez vos placements et vos liquidités dans chaque devise." />
         <div className="currency-report-list">
           {report.summary_by_currency.map((item) => (
             <div className="currency-report-row" key={item.currency}>
@@ -838,7 +818,7 @@ function TransactionTable({
                   {onApprove && transaction.status === "PENDING_APPROVAL" && (
                     <div className="row-actions">
                       {own ? (
-                        <span className="own-maker">Votre saisie</span>
+                        <span className="own-maker">Votre demande</span>
                       ) : (
                         <>
                           <button
@@ -950,7 +930,7 @@ function InvestmentsPage({
     if (!step) return;
     try {
       await api.reviewOrderStep(token, order.id, step.step_code, "APPROVE", "Contrôle traité depuis le portail");
-      notify(step.step_code === "CHECKER" ? "Ordre validé et position créée." : `Étape ${step.step_code} validée.`);
+      notify(step.step_code === "CHECKER" ? "Ordre validé et position créée." : `${workflowStepLabel(step.step_code)} validée.`);
       await refresh();
     } catch (err) {
       notify(err instanceof Error ? err.message : "Validation de l'ordre impossible", "error");
@@ -1035,9 +1015,9 @@ function InvestmentsPage({
         ))}
       </div>
       <SectionHeader
-        eyebrow="Workflow d'ordres"
+        eyebrow="Suivi des demandes"
         title="Ordres soumis"
-        description="Chaque ordre suit les contrôles conformité, back-office et checker avant son exécution."
+        description="Chaque demande est vérifiée avant son exécution."
       />
       {orders.length ? (
         <div className="order-list">
@@ -1055,11 +1035,11 @@ function InvestmentsPage({
                   <Badge tone={statusTone(order.status)}>{statusLabel(order.status)}</Badge>
                 </div>
                 <div className="order-steps">
-                  {order.steps.map((step) => <span className={step.status === "APPROVED" ? "done" : step.status === "REJECTED" ? "rejected" : step === nextStep ? "current" : ""} key={step.step_code}>{step.step_code.replace("_", " ")}</span>)}
+                  {order.steps.map((step) => <span className={step.status === "APPROVED" ? "done" : step.status === "REJECTED" ? "rejected" : step === nextStep ? "current" : ""} key={step.step_code}>{workflowStepLabel(step.step_code)}</span>)}
                 </div>
                 <div className="order-card-actions">
                   <span>{order.client_comment || "Ordre soumis par le client"}</span>
-                  {canReview && <Button onClick={() => reviewOrder(order)} icon="check">Traiter {nextStep?.step_code}</Button>}
+                  {canReview && <Button onClick={() => reviewOrder(order)} icon="check">Traiter {nextStep ? workflowStepLabel(nextStep.step_code) : "la demande"}</Button>}
                   {order.submitted_by_client_id === currentClientId && ["SUBMITTED", "COMPLIANCE_REVIEW", "BACK_OFFICE_REVIEW", "READY_FOR_CHECKER"].includes(order.status) && <button className="text-button subtle" onClick={() => cancelOrder(order)}>Annuler</button>}
                 </div>
               </article>
@@ -1189,8 +1169,8 @@ function InvestmentsPage({
               <span>Parcours de validation</span>
               <strong>Soumission avant exécution</strong>
               <small>
-                Le montant est réservé. La position et les écritures sont
-                créées après les contrôles conformité, back-office et checker.
+                Le montant est réservé jusqu’à la décision finale. Votre
+                demande sera vérifiée avant son exécution.
               </small>
             </div>
             <Button type="submit" disabled={busy || !accountId}>
@@ -1214,6 +1194,7 @@ function OperationsPage({
   accounts,
   transactions,
   currentClientId,
+  isBackOffice,
   refresh,
   notify,
 }: {
@@ -1221,6 +1202,7 @@ function OperationsPage({
   accounts: Account[];
   transactions: Transaction[];
   currentClientId: number;
+  isBackOffice: boolean;
   refresh: () => Promise<void>;
   notify: (message: string, tone?: "success" | "error") => void;
 }) {
@@ -1310,7 +1292,7 @@ function OperationsPage({
     <div className="page-stack page-enter">
       <div className="hero-row">
         <div>
-          <div className="eyebrow">Opérations et validations</div>
+          <div className="eyebrow">Vos opérations</div>
           <h1>Vos flux, sous contrôle.</h1>
           <p className="hero-copy">
             Initiez, vérifiez et suivez chaque mouvement sans perdre le
@@ -1319,7 +1301,7 @@ function OperationsPage({
         </div>
         <div className="hero-context">
           <span className="status-live">
-            <i /> Journal actif
+            <i /> Données à jour
           </span>
           <span>{pending.length} à valider</span>
         </div>
@@ -1351,7 +1333,7 @@ function OperationsPage({
             <SectionHeader
               eyebrow="Créer un mouvement"
               title="Nouvelle opération"
-              description="Les opérations sont créées par un maker puis validées par un checker."
+              description="Chaque opération est vérifiée avant d’être exécutée."
             />
             <div className="operation-type-selector">
               {(["DEPOT", "RETRAIT", "TRANSFERT"] as const).map((type) => (
@@ -1458,11 +1440,10 @@ function OperationsPage({
                   <Icon name="shield" size={18} />
                 </span>
                 <div>
-                  <strong>Contrôle à deux niveaux</strong>
+                  <strong>Vérification avant traitement</strong>
                   <p>
-                    Après votre saisie, un autre utilisateur habilité devra
-                    approuver le mouvement. Vous ne pouvez pas valider votre
-                    propre opération.
+                    Après votre saisie, votre opération est vérifiée avant
+                    d’être exécutée.
                   </p>
                 </div>
               </div>
@@ -1481,16 +1462,15 @@ function OperationsPage({
           </div>
           <aside className="panel operation-aside">
             <div className="aside-kicker">
-              <span className="signal-pulse" /> Registre financier
+              <span className="signal-pulse" /> Suivi de vos mouvements
             </div>
             <h3>
-              Le registre garde
+              Votre activité reste
               <br />
-              <em>le fil.</em>
+              <em>bien suivie.</em>
             </h3>
             <p>
-              Chaque débit, crédit et écriture comptable est traité dans une
-              transaction atomique.
+              Retrouvez ici vos mouvements, leur statut et leur historique.
             </p>
             <div className="ledger-line">
               <span>Liquidités disponibles</span>
@@ -1503,7 +1483,7 @@ function OperationsPage({
               <strong>À l’instant</strong>
             </div>
             <div className="aside-foot">
-              <Icon name="lock" size={15} /> Audit trail actif
+              <Icon name="refresh" size={15} /> Mis à jour à l’instant
             </div>
           </aside>
         </section>
@@ -1511,9 +1491,9 @@ function OperationsPage({
       {tab === "review" && (
         <section className="panel table-panel">
           <SectionHeader
-            eyebrow="Séparation des tâches"
+            eyebrow="À valider"
             title="File de validation"
-            description="Validez ou rejetez les mouvements créés par un autre utilisateur habilité."
+            description="Examinez les mouvements qui vous sont attribués."
           />
           {pending.length ? (
             <TransactionTable
@@ -1533,7 +1513,7 @@ function OperationsPage({
       {tab === "history" && (
         <section className="panel table-panel">
           <SectionHeader
-            eyebrow="Journal des mouvements"
+            eyebrow="Historique des mouvements"
             title="Historique complet"
             action={
               <button className="icon-button" aria-label="Exporter">
@@ -1551,7 +1531,7 @@ function OperationsPage({
           )}
         </section>
       )}
-      <section className="maturity-banner">
+      {isBackOffice && <section className="maturity-banner">
         <div className="maturity-icon">
           <Icon name="calendar" size={21} />
         </div>
@@ -1567,8 +1547,11 @@ function OperationsPage({
             try {
               const result = await api.generateMaturities(token);
               const coupons = await api.generateCoupons(token);
-              if (coupons.total) notify(`${result.total} remboursement(s) et ${coupons.total} coupon(s) prêt(s) pour validation.`);
-              notify(`${result.total} remboursement(s) généré(s).`);
+              const generated = [
+                result.total ? `${result.total} remboursement(s)` : "",
+                coupons.total ? `${coupons.total} coupon(s)` : "",
+              ].filter(Boolean);
+              notify(generated.length ? `${generated.join(" et ")} prêt(s) pour validation.` : "Aucune échéance à traiter.");
               await refresh();
             } catch (err) {
               notify(
@@ -1580,7 +1563,7 @@ function OperationsPage({
         >
           Lancer le contrôle <Icon name="arrow" size={16} />
         </button>
-      </section>
+      </section>}
       {rejectTarget && (
         <Modal
           title="Rejeter l’opération"
@@ -1589,7 +1572,7 @@ function OperationsPage({
         >
           <p className="modal-copy">
             Le rejet ne modifiera aucun solde. Le motif restera attaché à la
-            piste d’audit.
+            historique de l’opération.
           </p>
           <form className="modal-form" onSubmit={reject}>
             <label>
@@ -1649,7 +1632,7 @@ function AccountsPage({
       <div className="hero-row">
         <div>
           <div className="eyebrow">Comptes et liquidités</div>
-          <h1>Vos comptes, alignés.</h1>
+          <h1>Vos comptes au même endroit.</h1>
           <p className="hero-copy">
             Un point d’ancrage clair pour chaque devise, chaque usage et chaque
             décision.
@@ -1685,9 +1668,9 @@ function AccountsPage({
         </div>
       </div>
       <SectionHeader
-        eyebrow="Vue consolidée"
+        eyebrow="Vue d’ensemble"
         title="Tous vos comptes"
-        description="Vos droits d’accès et leurs soldes disponibles sont reflétés en temps réel."
+        description="Retrouvez les soldes et les informations de chaque compte."
       />
       <div className="account-grid">
         {accounts.map((account, index) => (
@@ -1743,8 +1726,8 @@ function AccountsPage({
         <div>
           <strong>Chaque compte a son rôle.</strong>
           <span>
-            Les mandats, droits de consultation et opérations sont contrôlés par
-            le registre avant toute écriture.
+            Les accès et les opérations de chaque compte sont suivis pour
+            protéger vos avoirs.
           </span>
         </div>
       </div>
@@ -1927,14 +1910,14 @@ function ProfilePage({
     <div className="page-stack page-enter">
       <div className="hero-row">
         <div>
-          <div className="eyebrow">Identité & conformité</div>
-          <h1>Informations KYC.</h1>
+          <div className="eyebrow">Mon profil</div>
+          <h1>Mes informations.</h1>
           <p className="hero-copy">
-            Gardez vos informations à jour pour des opérations fluides et
-            traçables.
+            Gardez vos informations à jour pour faciliter le suivi de votre
+            compte.
           </p>
         </div>
-        <Badge tone="success">KYC actif</Badge>
+        <Badge tone="success">Dossier à jour</Badge>
       </div>
       <div className="profile-grid">
         <section className="panel identity-card">
@@ -1962,14 +1945,14 @@ function ProfilePage({
           </div>
           <div className="identity-security">
             <Icon name="shield" size={18} />
-            <span>Informations KYC enregistrées</span>
+            <span>Informations vérifiées</span>
           </div>
         </section>
         <section className="panel profile-form-panel">
           <SectionHeader
             eyebrow="Coordonnées"
             title="Informations de contact"
-            description="Ces informations sont utilisées pour les notifications opérationnelles."
+            description="Ces informations nous permettent de vous contacter au sujet de votre compte."
           />
           <form className="profile-form" onSubmit={submit}>
             <div className="form-grid">
@@ -2190,6 +2173,7 @@ function App() {
         accounts={accounts}
         transactions={transactions}
         currentClientId={session.client.client_id}
+        isBackOffice={Boolean(backOfficeReport)}
         refresh={refresh}
         notify={notify}
       />
