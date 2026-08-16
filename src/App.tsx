@@ -409,6 +409,9 @@ function Shell({
           >
             <Icon name="menu" />
           </button>
+          <div className="mobile-topbar-brand">
+            <ProFinLogo className="profin-logo-topbar-mobile" />
+          </div>
           <div className="breadcrumbs">
             <span>Console</span>
             <Icon name="chevron" size={14} />
