@@ -52,6 +52,10 @@ const demoAccounts = [
 type Theme = "light" | "dark";
 const THEME_KEY = "profin.core.theme";
 
+function ProFinLogo({ className = "" }: { className?: string }) {
+  return <img className={`profin-logo ${className}`} src="/profin-logo.png" alt="ProFin" />;
+}
+
 const money = (value: number | string | null | undefined, currency = "USD") =>
   new Intl.NumberFormat("fr-CA", {
     style: "currency",
@@ -201,9 +205,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
       <div className="auth-orb orb-one" />
       <div className="auth-orb orb-two" />
       <section className="auth-visual">
-        <div className="brand-mark large">
-          <span>PF</span>
-        </div>
+        <ProFinLogo className="profin-logo-auth" />
         <div className="auth-kicker">PROFIN / PORTAIL CLIENT</div>
         <h1>
           Suivre vos investissements
@@ -222,15 +224,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
       </section>
       <section className="auth-panel">
         <div className="auth-panel-inner">
-          <div className="mobile-brand">
-            <div className="brand-mark">
-              <span>PF</span>
-            </div>
-            <div>
-              <strong>ProFin</strong>
-              <small>Portail client</small>
-            </div>
-          </div>
+          <div className="mobile-brand"><ProFinLogo className="profin-logo-mobile" /></div>
           <div className="eyebrow">Espace sécurisé</div>
           <h2>Connexion</h2>
           <p className="auth-subtitle">
@@ -348,15 +342,7 @@ function Shell({
     <div className="app-shell">
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="sidebar-top">
-          <div className="brand-lockup">
-            <div className="brand-mark">
-              <span>PF</span>
-            </div>
-            <div>
-              <strong>ProFin</strong>
-              <small>Portail client</small>
-            </div>
-          </div>
+          <div className="brand-lockup"><ProFinLogo className="profin-logo-sidebar" /></div>
           <button
             className="icon-button mobile-close"
             onClick={() => setMobileOpen(false)}
