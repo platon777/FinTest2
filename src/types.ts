@@ -1,5 +1,16 @@
 export type Page = 'overview' | 'investments' | 'operations' | 'accounts' | 'profile' | 'backoffice';
 
+export interface AssistantMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AssistantChatResponse {
+  answer: string;
+  disclaimer: string;
+  context_used: string[];
+}
+
 export interface CurrencyReport {
   currency: string;
   invested: number;

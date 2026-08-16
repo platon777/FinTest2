@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, api, getStoredSession, storeSession } from "./api";
 import type {
   Account,
+  AssistantMessage,
   AuthSession,
   BackOfficeReport,
   ClientBusinessReport,
@@ -312,6 +313,81 @@ function LoginScreen({ onLogin, notice = "" }: { onLogin: (session: AuthSession)
   );
 }
 
+function normalizeAssistantText(value: string) {
+  return value
+    .replaceAll("\u00c3\u00a0", "\u00e0")
+    .replaceAll("\u00c3\u00a9", "\u00e9")
+    .replaceAll("\u00c3\u00a8", "\u00e8")
+    .replaceAll("\u00c3\u00aa", "\u00ea")
+    .replaceAll("\u00c3\u00a7", "\u00e7")
+    .replaceAll("\u00c3\u00bb", "\u00fb");
+}
+
+function AssistantPanel({ token, onClose }: { token: string; onClose: () => void }) {
+  const [messages, setMessages] = useState<AssistantMessage[]>([
+    { role: "assistant", content: "Bonjour. Je peux vous aider à comprendre vos comptes, vos placements, vos ordres et vos prochaines échéances." },
+  ]);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const suggestions = [
+    "Quelle est la valeur de mon portefeuille ?",
+    "Pourquoi mon ordre est-il en attente ?",
+    "Quelle est ma prochaine échéance ?",
+  ];
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
+  const send = async (event?: React.FormEvent, suggestedMessage?: string) => {
+    event?.preventDefault();
+    const message = normalizeAssistantText((suggestedMessage ?? draft).trim());
+    if (!message || busy) return;
+    setDraft("");
+    setError("");
+    const nextMessages: AssistantMessage[] = [...messages, { role: "user", content: message }];
+    setMessages(nextMessages);
+    setBusy(true);
+    try {
+      const result = await api.assistantChat(token, message, nextMessages.slice(-8));
+      setMessages((current) => [...current, { role: "assistant", content: result.answer }]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "L'assistant est temporairement indisponible.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="assistant-scrim" onClick={onClose} aria-hidden="true" />
+      <section className="assistant-panel" role="dialog" aria-modal="true" aria-label="Assistant ProFin">
+      <div className="assistant-panel-head">
+        <div className="assistant-title"><span className="assistant-icon"><Icon name="spark" size={17} /></span><div><strong>Assistant ProFin</strong><small>Vos données, expliquées simplement</small></div></div>
+        <button className="icon-button" onClick={onClose} aria-label="Fermer l'assistant"><Icon name="close" size={17} /></button>
+      </div>
+      <div className="assistant-messages" aria-live="polite">
+        {messages.map((item, index) => <div className={`assistant-message ${item.role}`} key={`${item.role}-${index}`}><span>{normalizeAssistantText(item.content)}</span></div>)}
+        {busy && <div className="assistant-message assistant"><span className="assistant-typing"><i /><i /><i /></span></div>}
+      </div>
+      {messages.length === 1 && <div className="assistant-suggestions">{suggestions.map((item) => <button key={item} onClick={() => void send(undefined, item)}>{normalizeAssistantText(item)}</button>)}</div>}
+      {error && <div className="assistant-error"><Icon name="alert" size={14} />{error}</div>}
+      <form className="assistant-composer" onSubmit={send}>
+        <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Posez votre question..." aria-label="Question à l'assistant" maxLength={2000} />
+        <button className="assistant-send" type="submit" disabled={busy || !draft.trim()} aria-label="Envoyer"><Icon name="arrow" size={17} /></button>
+      </form>
+      <p className="assistant-disclaimer">Réponse informative. Les opérations financières suivent toujours le parcours de validation.</p>
+      </section>
+    </>
+  );
+}
+
 function Shell({
   session,
   page,
@@ -332,6 +408,7 @@ function Shell({
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const name = getClientName(session);
   const nav = [
     { id: "overview" as Page, label: "Vue d’ensemble", icon: "grid" as const },
@@ -413,6 +490,9 @@ function Shell({
             <button className="icon-button" onClick={onToggleTheme} aria-label={theme === "light" ? "Activer le mode sombre" : "Activer le mode clair"} title={theme === "light" ? "Mode sombre" : "Mode clair"}>
               <Icon name={theme === "light" ? "moon" : "sun"} size={18} />
             </button>
+            <button className={`assistant-trigger ${assistantOpen ? "active" : ""}`} onClick={() => setAssistantOpen((current) => !current)} aria-label="Ouvrir l'assistant" title="Assistant ProFin">
+              <Icon name="spark" size={17} /><span>Assistant</span>
+            </button>
             <button className="icon-button" aria-label="Rechercher">
               <Icon name="search" size={19} />
             </button>
@@ -431,6 +511,7 @@ function Shell({
           </div>
         </header>
         <div className="page-content">{children}</div>
+        {assistantOpen && <AssistantPanel token={session.tokens.access_token} onClose={() => setAssistantOpen(false)} />}
         <nav className="mobile-nav" aria-label="Navigation mobile">
           {nav.slice(0, 4).map((item) => (
             <button

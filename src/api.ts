@@ -1,4 +1,4 @@
-import type { Account, AuthSession, BackOfficeReport, ClientBusinessReport, DashboardOverview, Instrument, InvestmentOrder, Profile, RegulatoryReport, Subscription, Transaction } from './types';
+import type { Account, AssistantChatResponse, AssistantMessage, AuthSession, BackOfficeReport, ClientBusinessReport, DashboardOverview, Instrument, InvestmentOrder, Profile, RegulatoryReport, Subscription, Transaction } from './types';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
 const SESSION_KEY = 'profin.core.session';
@@ -36,7 +36,10 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   let payload: unknown = null;
   try { payload = raw ? JSON.parse(raw) : null; } catch { payload = raw; }
   if (!response.ok) {
-    const detail = typeof payload === 'object' && payload && 'detail' in payload ? String((payload as { detail: unknown }).detail) : `Erreur API (${response.status})`;
+    const detailValue = typeof payload === 'object' && payload && 'detail' in payload ? (payload as { detail: unknown }).detail : undefined;
+    const detail = typeof detailValue === 'object' && detailValue && 'message' in detailValue
+      ? String((detailValue as { message: unknown }).message)
+      : detailValue ? String(detailValue) : `Erreur API (${response.status})`;
     throw new ApiError(detail, response.status);
   }
   return payload as T;
@@ -71,4 +74,5 @@ export const api = {
   reject: (token: string, id: number, reason: string) => request<{ transaction: Transaction }>(`/transactions/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }, token),
   profile: (token: string) => request<Profile>('/profil', {}, token),
   updateProfile: (token: string, payload: Record<string, string>) => request<Profile>('/profil', { method: 'PATCH', body: JSON.stringify(payload) }, token),
+  assistantChat: (token: string, message: string, history: AssistantMessage[]) => request<AssistantChatResponse>('/assistant/chat', { method: 'POST', body: JSON.stringify({ message, history }) }, token),
 };
