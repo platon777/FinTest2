@@ -724,7 +724,7 @@ function ClientReportPanels({ report }: { report: ClientBusinessReport | null })
         <div className="currency-report-list">
           {report.summary_by_currency.map((item) => (
             <div className="currency-report-row" key={item.currency}>
-              <div><span className="currency-pill">{item.currency}</span><strong>{item.active_positions} position(s)</strong><small>TMA {Number(item.tma_percentage).toFixed(2)}% Â· frais {money(item.fees, item.currency)}</small></div>
+              <div><span className="currency-pill">{item.currency}</span><strong>{item.active_positions} position(s)</strong><small>TMA {Number(item.tma_percentage).toFixed(2)}% · frais {money(item.fees, item.currency)}</small></div>
               <div><strong>{money(item.current_value, item.currency)}</strong><small>{item.return_amount >= 0 ? "+" : ""}{money(item.return_amount, item.currency)} de variation</small></div>
               <div><span>Disponible</span><strong>{money(item.available_cash, item.currency)}</strong></div>
             </div>
@@ -1567,7 +1567,7 @@ function OperationsPage({
             try {
               const result = await api.generateMaturities(token);
               const coupons = await api.generateCoupons(token);
-              if (coupons.total) notify(`${result.total} remboursement(s) et ${coupons.total} coupon(s) prÃªt(s) pour validation.`);
+              if (coupons.total) notify(`${result.total} remboursement(s) et ${coupons.total} coupon(s) prêt(s) pour validation.`);
               notify(`${result.total} remboursement(s) généré(s).`);
               await refresh();
             } catch (err) {
