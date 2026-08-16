@@ -60,6 +60,38 @@ export interface Subscription {
   currency?: string | null;
 }
 
+export interface OrderStep {
+  step_code: string;
+  status: string;
+  actor_profile: string;
+  notes?: string | null;
+  completed_at?: string | null;
+}
+
+export interface InvestmentOrder {
+  id: number;
+  client_id: number;
+  account_id: number;
+  instrument_id: number;
+  order_type: string;
+  amount: number;
+  units?: number | null;
+  currency: string;
+  status: string;
+  client_comment?: string | null;
+  rejection_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+  submitted_by_client_id: number;
+  checked_by_client_id?: number | null;
+  executed_transaction_id?: number | null;
+  executed_subscription_id?: number | null;
+  instrument_name?: string | null;
+  instrument_code?: string | null;
+  account_number?: string | null;
+  steps: OrderStep[];
+}
+
 export interface Transaction {
   id: number;
   transaction_type: string;

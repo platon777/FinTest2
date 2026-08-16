@@ -5,6 +5,7 @@ import type {
   AuthSession,
   DashboardOverview,
   Instrument,
+  InvestmentOrder,
   Page,
   Profile,
   Subscription,
@@ -40,7 +41,16 @@ const demoAccounts = [
     password: "ProfinDemo!2026",
     description: "Rôle observateur",
   },
+  {
+    label: "Sophie Laurent",
+    email: "sophie.checker@demo.profin.ht",
+    password: "ProfinDemo!2026",
+    description: "Mandataire de validation",
+  },
 ];
+
+type Theme = "light" | "dark";
+const THEME_KEY = "profin.core.theme";
 
 const money = (value: number | string | null | undefined, currency = "USD") =>
   new Intl.NumberFormat("fr-CA", {
@@ -92,7 +102,7 @@ function statusTone(
 ): "neutral" | "success" | "warning" | "danger" | "purple" {
   if (["EXECUTED", "ACTIVE", "DISPONIBLE", "MATURE"].includes(status))
     return "success";
-  if (["PENDING_APPROVAL", "MATURITE_EN_ATTENTE"].includes(status))
+  if (["PENDING_APPROVAL", "MATURITE_EN_ATTENTE", "SUBMITTED", "COMPLIANCE_REVIEW", "BACK_OFFICE_REVIEW", "READY_FOR_CHECKER"].includes(status))
     return "warning";
   if (["REJECTED", "FAILED"].includes(status)) return "danger";
   if (["RACHETEE"].includes(status)) return "purple";
@@ -110,6 +120,11 @@ function statusLabel(status: string) {
     REJECTED: "Rejetée",
     RACHETEE: "Rachetée",
     FAILED: "Échec",
+    SUBMITTED: "Soumis",
+    COMPLIANCE_REVIEW: "Contrôle conformité",
+    BACK_OFFICE_REVIEW: "Contrôle back-office",
+    READY_FOR_CHECKER: "Prêt pour checker",
+    CANCELLED: "Annulé",
   };
   return labels[status] || status.replaceAll("_", " ");
 }
@@ -189,21 +204,20 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
         <div className="brand-mark large">
           <span>PF</span>
         </div>
-        <div className="auth-kicker">PROFIN / CORE INVESTMENT PLATFORM</div>
+        <div className="auth-kicker">PROFIN / PORTAIL CLIENT</div>
         <h1>
-          La clarté
+          Suivre vos investissements
           <br />
-          <em>qui investit.</em>
+          <em>en toute clarté.</em>
         </h1>
         <p>
-          Une console calme pour comprendre vos positions, sécuriser vos flux et
-          décider avec une longueur d’avance.
+          Consultez vos comptes, soumettez vos ordres et suivez chaque étape de validation.
         </p>
         <div className="auth-visual-footer">
           <span className="status-live">
-            <i /> Core opérationnel
+            <i /> Services disponibles
           </span>
-          <span>Prototype sécurisé</span>
+          <span>Accès contrôlé</span>
         </div>
       </section>
       <section className="auth-panel">
@@ -214,13 +228,13 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
             </div>
             <div>
               <strong>ProFin</strong>
-              <small>Core Console</small>
+              <small>Portail client</small>
             </div>
           </div>
           <div className="eyebrow">Espace sécurisé</div>
-          <h2>Bon retour.</h2>
+          <h2>Connexion</h2>
           <p className="auth-subtitle">
-            Connectez-vous pour retrouver votre vue patrimoniale.
+            Accédez à vos comptes, positions et ordres en cours.
           </p>
           <form onSubmit={submit} className="auth-form">
             <label>
@@ -302,12 +316,16 @@ function Shell({
   page,
   setPage,
   onLogout,
+  theme,
+  onToggleTheme,
   children,
 }: {
   session: AuthSession;
   page: Page;
   setPage: (page: Page) => void;
   onLogout: () => void;
+  theme: Theme;
+  onToggleTheme: () => void;
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -336,7 +354,7 @@ function Shell({
             </div>
             <div>
               <strong>ProFin</strong>
-              <small>Core Console</small>
+              <small>Portail client</small>
             </div>
           </div>
           <button
@@ -351,7 +369,7 @@ function Shell({
           <span className="workspace-dot" />
           <span>
             <small>Environnement</small>
-            <strong>Prototype local</strong>
+            <strong>Démonstration locale</strong>
           </span>
           <Icon name="chevron" size={15} />
         </div>
@@ -383,8 +401,8 @@ function Shell({
           <div className="security-card">
             <Icon name="shield" size={20} />
             <div>
-              <strong>Données protégées</strong>
-              <small>Connexion chiffrée</small>
+              <strong>Accès contrôlé</strong>
+              <small>Session chiffrée</small>
             </div>
           </div>
           <button className="logout-button" onClick={onLogout}>
@@ -414,8 +432,11 @@ function Shell({
           </div>
           <div className="topbar-actions">
             <div className="core-status">
-              <i /> <span>Core en ligne</span>
+              <i /> <span>Services disponibles</span>
             </div>
+            <button className="icon-button" onClick={onToggleTheme} aria-label={theme === "light" ? "Activer le mode sombre" : "Activer le mode clair"} title={theme === "light" ? "Mode sombre" : "Mode clair"}>
+              <Icon name={theme === "light" ? "moon" : "sun"} size={18} />
+            </button>
             <button className="icon-button" aria-label="Rechercher">
               <Icon name="search" size={19} />
             </button>
@@ -480,8 +501,7 @@ function DashboardPage({
           </div>
           <h1>Bonjour, {name}.</h1>
           <p className="hero-copy">
-            Votre patrimoine évolue avec intention. Voici ce qui mérite votre
-            attention aujourd’hui.
+            Consultez vos positions, vos liquidités et les opérations en attente.
           </p>
         </div>
         <Button icon="plus" onClick={() => go("operations")}>
@@ -493,8 +513,8 @@ function DashboardPage({
           <Icon name="spark" size={18} />
         </div>
         <div>
-          <strong>Votre portefeuille travaille.</strong>
-          <span>Rendement consolidé sur vos positions actives.</span>
+          <strong>Synthèse du portefeuille</strong>
+          <span>Rendement consolidé des positions actives.</span>
         </div>
         <div className="signal-value">
           +{number(overview?.return_percentage)}
@@ -570,8 +590,7 @@ function DashboardPage({
             </div>
           </div>
           <div className="panel-footnote">
-            <Icon name="shield" size={15} /> Valorisation issue du Core
-            Investment Platform
+            <Icon name="shield" size={15} /> Valorisation des positions actives
           </div>
         </section>
         <section className="panel attention-panel">
@@ -818,14 +837,18 @@ function InvestmentsPage({
   token,
   instruments,
   investments,
+  orders,
   accounts,
+  currentClientId,
   refresh,
   notify,
 }: {
   token: string;
   instruments: Instrument[];
   investments: Subscription[];
+  orders: InvestmentOrder[];
   accounts: Account[];
+  currentClientId: number;
   refresh: () => Promise<void>;
   notify: (message: string, tone?: "success" | "error") => void;
 }) {
@@ -850,12 +873,13 @@ function InvestmentsPage({
     if (!instrument || !accountId) return;
     setBusy(true);
     try {
-      await api.subscribe(token, {
+      await api.submitOrder(token, {
         account_id: Number(accountId),
         instrument_id: instrument.id,
-        invested_amount: Number(amount),
+        amount: Number(amount),
+        client_comment: "Ordre soumis depuis le portail client",
       });
-      notify("Souscription enregistrée et position créée.");
+      notify("Ordre soumis. Le montant est réservé jusqu'à la validation.");
       setInstrument(null);
       await refresh();
     } catch (err) {
@@ -880,12 +904,33 @@ function InvestmentsPage({
       setRedeeming(null);
     }
   };
+  const reviewOrder = async (order: InvestmentOrder) => {
+    const step = order.steps.find((item) => item.status === "PENDING");
+    if (!step) return;
+    try {
+      await api.reviewOrderStep(token, order.id, step.step_code, "APPROVE", "Contrôle traité depuis le portail");
+      notify(step.step_code === "CHECKER" ? "Ordre validé et position créée." : `Étape ${step.step_code} validée.`);
+      await refresh();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Validation de l'ordre impossible", "error");
+    }
+  };
+  const cancelOrder = async (order: InvestmentOrder) => {
+    if (!window.confirm("Annuler cet ordre et libérer le montant réservé ?")) return;
+    try {
+      await api.cancelOrder(token, order.id);
+      notify("Ordre annulé et montant libéré.");
+      await refresh();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Annulation impossible", "error");
+    }
+  };
   return (
     <div className="page-stack page-enter">
       <div className="hero-row">
         <div>
           <div className="eyebrow">Marché primaire</div>
-          <h1>Investir avec intention.</h1>
+          <h1>Soumettre un ordre.</h1>
           <p className="hero-copy">
             Des instruments sélectionnés, une lecture nette du rendement et des
             échéances.
@@ -900,11 +945,10 @@ function InvestmentsPage({
       </div>
       <section className="panel market-intro">
         <div>
-          <span className="eyebrow">Allocation intelligente</span>
-          <h2>Des opportunités qui ont un horizon.</h2>
+          <span className="eyebrow">Référentiel d'instruments</span>
+          <h2>Choisir un instrument disponible.</h2>
           <p>
-            Chaque position relie un rendement, une échéance et une décision de
-            trésorerie compréhensible.
+            Examinez le rendement, la devise, le minimum et l'échéance avant de soumettre votre ordre.
           </p>
         </div>
         <div className="market-symbol">
@@ -949,6 +993,39 @@ function InvestmentsPage({
           </article>
         ))}
       </div>
+      <SectionHeader
+        eyebrow="Workflow d'ordres"
+        title="Ordres soumis"
+        description="Chaque ordre suit les contrôles conformité, back-office et checker avant son exécution."
+      />
+      {orders.length ? (
+        <div className="order-list">
+          {orders.map((order) => {
+            const nextStep = order.steps.find((step) => step.status === "PENDING");
+            const canReview = order.submitted_by_client_id !== currentClientId && Boolean(nextStep) && !["EXECUTED", "REJECTED", "CANCELLED"].includes(order.status);
+            return (
+              <article className="panel order-card" key={order.id}>
+                <div className="order-card-top">
+                  <div>
+                    <span className="eyebrow">Ordre #{order.id} · {date(order.created_at)}</span>
+                    <h3>{order.instrument_name || order.instrument_code}</h3>
+                    <p>{money(order.amount, order.currency)} · Compte {order.account_number}</p>
+                  </div>
+                  <Badge tone={statusTone(order.status)}>{statusLabel(order.status)}</Badge>
+                </div>
+                <div className="order-steps">
+                  {order.steps.map((step) => <span className={step.status === "APPROVED" ? "done" : step.status === "REJECTED" ? "rejected" : step === nextStep ? "current" : ""} key={step.step_code}>{step.step_code.replace("_", " ")}</span>)}
+                </div>
+                <div className="order-card-actions">
+                  <span>{order.client_comment || "Ordre soumis par le client"}</span>
+                  {canReview && <Button onClick={() => reviewOrder(order)} icon="check">Traiter {nextStep?.step_code}</Button>}
+                  {order.submitted_by_client_id === currentClientId && ["SUBMITTED", "COMPLIANCE_REVIEW", "BACK_OFFICE_REVIEW", "READY_FOR_CHECKER"].includes(order.status) && <button className="text-button subtle" onClick={() => cancelOrder(order)}>Annuler</button>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : <EmptyState title="Aucun ordre soumis" description="Les ordres d'investissement créés depuis le portail apparaîtront ici." />}
       <SectionHeader
         eyebrow="Votre portefeuille"
         title="Positions actives"
@@ -1068,11 +1145,11 @@ function InvestmentsPage({
               </small>
             </label>
             <div className="modal-summary">
-              <span>Validation prototype</span>
-              <strong>Exécution immédiate</strong>
+              <span>Parcours de validation</span>
+              <strong>Soumission avant exécution</strong>
               <small>
-                La souscription sera enregistrée, le compte débité et la
-                position créée dans le Core.
+                Le montant est réservé. La position et les écritures sont
+                créées après les contrôles conformité, back-office et checker.
               </small>
             </div>
             <Button type="submit" disabled={busy || !accountId}>
@@ -1081,7 +1158,7 @@ function InvestmentsPage({
                   <Spinner /> Enregistrement…
                 </>
               ) : (
-                "Confirmer la souscription"
+                "Soumettre l'ordre"
               )}
             </Button>
           </form>
@@ -1182,11 +1259,11 @@ function OperationsPage({
     <div className="page-stack page-enter">
       <div className="hero-row">
         <div>
-          <div className="eyebrow">Core operations</div>
+          <div className="eyebrow">Opérations et validations</div>
           <h1>Vos flux, sous contrôle.</h1>
           <p className="hero-copy">
             Initiez, vérifiez et suivez chaque mouvement sans perdre le
-            contexte.
+            historique.
           </p>
         </div>
         <div className="hero-context">
@@ -1353,10 +1430,10 @@ function OperationsPage({
           </div>
           <aside className="panel operation-aside">
             <div className="aside-kicker">
-              <span className="signal-pulse" /> Live ledger
+              <span className="signal-pulse" /> Registre financier
             </div>
             <h3>
-              Le Core garde
+              Le registre garde
               <br />
               <em>le fil.</em>
             </h3>
@@ -1397,7 +1474,7 @@ function OperationsPage({
           ) : (
             <EmptyState
               title="File vide"
-              description="Aucune opération n’attend de validation. Le Core est à jour."
+              description="Aucune opération n’attend de validation. La file est à jour."
             />
           )}
         </section>
@@ -1518,7 +1595,7 @@ function AccountsPage({
     <div className="page-stack page-enter">
       <div className="hero-row">
         <div>
-          <div className="eyebrow">Architecture de trésorerie</div>
+          <div className="eyebrow">Comptes et liquidités</div>
           <h1>Vos comptes, alignés.</h1>
           <p className="hero-copy">
             Un point d’ancrage clair pour chaque devise, chaque usage et chaque
@@ -1614,7 +1691,7 @@ function AccountsPage({
           <strong>Chaque compte a son rôle.</strong>
           <span>
             Les mandats, droits de consultation et opérations sont contrôlés par
-            le Core avant toute écriture.
+            le registre avant toute écriture.
           </span>
         </div>
       </div>
@@ -1724,7 +1801,7 @@ function ProfilePage({
       <div className="hero-row">
         <div>
           <div className="eyebrow">Identité & conformité</div>
-          <h1>Votre profil, votre contexte.</h1>
+          <h1>Informations KYC.</h1>
           <p className="hero-copy">
             Gardez vos informations à jour pour des opérations fluides et
             traçables.
@@ -1758,7 +1835,7 @@ function ProfilePage({
           </div>
           <div className="identity-security">
             <Icon name="shield" size={18} />
-            <span>Identité vérifiée par le Core</span>
+            <span>Informations KYC enregistrées</span>
           </div>
         </section>
         <section className="panel profile-form-panel">
@@ -1833,6 +1910,10 @@ function ProfilePage({
 
 function App() {
   const [session, setSession] = useState<AuthSession | null>(getStoredSession);
+  const [theme, setTheme] = useState<Theme>(() => {
+    const stored = localStorage.getItem(THEME_KEY);
+    return stored === "dark" ? "dark" : "light";
+  });
   const [page, setPage] = useState<Page>("overview");
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [recent, setRecent] = useState<Transaction[]>([]);
@@ -1840,6 +1921,7 @@ function App() {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [orders, setOrders] = useState<InvestmentOrder[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{
@@ -1865,6 +1947,7 @@ function App() {
       api.accounts(token),
       api.subscriptions(token),
       api.transactions(token),
+      api.orders(token),
       api.profile(token),
     ]);
     const [
@@ -1875,6 +1958,7 @@ function App() {
       accountResult,
       subscriptionsResult,
       transactionResult,
+      ordersResult,
       profileResult,
     ] = results;
     if (overviewResult.status === "fulfilled")
@@ -1891,9 +1975,14 @@ function App() {
       setInvestments(subscriptionsResult.value.subscriptions || []);
     if (transactionResult.status === "fulfilled")
       setTransactions(transactionResult.value.transactions || []);
+    if (ordersResult.status === "fulfilled") setOrders(ordersResult.value.orders || []);
     if (profileResult.status === "fulfilled") setProfile(profileResult.value);
     setLoading(false);
   }, [session]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
   useEffect(() => {
     refresh();
     const retry = window.setTimeout(() => refresh(), 1800);
@@ -1926,7 +2015,9 @@ function App() {
         token={token}
         instruments={instruments}
         investments={investments}
+        orders={orders}
         accounts={accounts}
+        currentClientId={session.client.client_id}
         refresh={refresh}
         notify={notify}
       />
@@ -1956,7 +2047,7 @@ function App() {
     );
   return (
     <>
-      <Shell session={session} page={page} setPage={setPage} onLogout={logout}>
+      <Shell session={session} page={page} setPage={setPage} onLogout={logout} theme={theme} onToggleTheme={() => setTheme((current) => current === "light" ? "dark" : "light")}>
         {loading && (
           <div className="sync-indicator">
             <Spinner /> Synchronisation

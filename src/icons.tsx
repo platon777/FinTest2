@@ -1,6 +1,6 @@
 import type { ReactNode, SVGProps } from 'react';
 
-type IconName = 'grid' | 'trend' | 'swap' | 'wallet' | 'user' | 'arrow' | 'plus' | 'search' | 'bell' | 'chevron' | 'logout' | 'shield' | 'download' | 'close' | 'check' | 'alert' | 'refresh' | 'calendar' | 'eye' | 'lock' | 'filter' | 'menu' | 'building' | 'bank' | 'spark';
+type IconName = 'grid' | 'trend' | 'swap' | 'wallet' | 'user' | 'arrow' | 'plus' | 'search' | 'bell' | 'chevron' | 'logout' | 'shield' | 'download' | 'close' | 'check' | 'alert' | 'refresh' | 'calendar' | 'eye' | 'lock' | 'filter' | 'menu' | 'building' | 'bank' | 'spark' | 'sun' | 'moon';
 
 const paths: Record<IconName, ReactNode> = {
   grid: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
@@ -28,6 +28,8 @@ const paths: Record<IconName, ReactNode> = {
   building: <><path d="M4 21V5l8-2 8 2v16M2 21h20"/><path d="M8 8h1M15 8h1M8 12h1M15 12h1M8 16h1M15 16h1"/></>,
   bank: <><path d="m3 10 9-6 9 6H3Z"/><path d="M5 10v8M9 10v8M15 10v8M19 10v8M3 21h18"/></>,
   spark: <><path d="m12 2 1.5 6.5L20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5z"/><path d="m19 17 .6 2.4L22 20l-2.4.6L19 23l-.6-2.4L16 20l2.4-.6z"/></>,
+  sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></>,
+  moon: <path d="M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5 8.5 8.5 0 1 0 20.5 15.5Z"/>,
 };
 
 export function Icon({ name, size = 20, strokeWidth = 1.8, ...props }: { name: IconName; size?: number; strokeWidth?: number } & SVGProps<SVGSVGElement>) {

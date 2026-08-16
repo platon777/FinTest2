@@ -1,4 +1,4 @@
-import type { Account, AuthSession, DashboardOverview, Instrument, Profile, Subscription, Transaction } from './types';
+import type { Account, AuthSession, DashboardOverview, Instrument, InvestmentOrder, Profile, Subscription, Transaction } from './types';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
 const SESSION_KEY = 'profin.core.session';
@@ -43,6 +43,10 @@ export const api = {
   instruments: (token: string) => request<{ instruments: Instrument[] }>('/instruments/', {}, token),
   subscriptions: (token: string) => request<{ subscriptions: Subscription[] }>('/souscriptions/mes-souscriptions', {}, token),
   subscribe: (token: string, payload: { account_id: number; instrument_id: number; invested_amount: number }) => request<{ subscription: Subscription }>('/souscriptions/', { method: 'POST', body: JSON.stringify(payload) }, token),
+  submitOrder: (token: string, payload: { account_id: number; instrument_id: number; amount: number; client_comment?: string }) => request<{ order: InvestmentOrder }>('/ordres/', { method: 'POST', body: JSON.stringify(payload) }, token),
+  orders: (token: string) => request<{ total: number; orders: InvestmentOrder[] }>('/ordres/mes-ordres', {}, token),
+  reviewOrderStep: (token: string, orderId: number, stepCode: string, decision: 'APPROVE' | 'REJECT', notes?: string) => request<{ order: InvestmentOrder }>(`/ordres/${orderId}/steps/${stepCode}`, { method: 'POST', body: JSON.stringify({ decision, notes }) }, token),
+  cancelOrder: (token: string, orderId: number) => request<{ order: InvestmentOrder }>(`/ordres/${orderId}/cancel`, { method: 'POST' }, token),
   redeem: (token: string, id: number) => request<{ souscription: Subscription }>(`/souscriptions/${id}/racheter`, { method: 'POST' }, token),
   generateMaturities: (token: string, asOf?: string) => request<{ total: number; transactions: Transaction[] }>(`/souscriptions/maintenance/maturites${asOf ? `?as_of=${asOf}` : ''}`, { method: 'POST' }, token),
   transactions: (token: string) => request<{ transactions: Transaction[] }>('/transactions/mes-transactions', {}, token),
