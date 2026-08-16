@@ -148,4 +148,6 @@ html[data-theme="light"] .auth-visual .profin-logo { filter: drop-shadow(0 10px 
   .topbar { justify-content: flex-start; }
   .topbar-actions { margin-left: auto; }
   .breadcrumbs { display: none; }
+  .sidebar { padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
+  .sidebar-open ~ .main-area .mobile-nav { opacity: 0; pointer-events: none; }
 }
