@@ -1,0 +1,1985 @@
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { api, getStoredSession, storeSession } from "./api";
+import type {
+  Account,
+  AuthSession,
+  DashboardOverview,
+  Instrument,
+  Page,
+  Profile,
+  Subscription,
+  Transaction,
+} from "./types";
+import { Icon } from "./icons";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Metric,
+  Modal,
+  SectionHeader,
+  Spinner,
+} from "./ui";
+
+const demoAccounts = [
+  {
+    label: "Marie Jean",
+    email: "marie.jean@demo.profin.ht",
+    password: "ProfinDemo!2026",
+    description: "Investisseuse individuelle",
+  },
+  {
+    label: "Caribe Investissements",
+    email: "caribe.invest@demo.profin.ht",
+    password: "ProfinDemo!2026",
+    description: "Compte institutionnel",
+  },
+  {
+    label: "Paul Joseph",
+    email: "paul.observer@demo.profin.ht",
+    password: "ProfinDemo!2026",
+    description: "Rôle observateur",
+  },
+];
+
+const money = (value: number | string | null | undefined, currency = "USD") =>
+  new Intl.NumberFormat("fr-CA", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+const number = (value: number | string | null | undefined) =>
+  new Intl.NumberFormat("fr-CA", { maximumFractionDigits: 2 }).format(
+    Number(value || 0),
+  );
+const date = (value?: string | null) =>
+  value
+    ? new Intl.DateTimeFormat("fr-FR", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }).format(new Date(value))
+    : "—";
+const initials = (name: string) =>
+  name
+    .split(" ")
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+const liquidityByCurrency = (accounts: Account[]) =>
+  Object.entries(
+    accounts.reduce<Record<string, number>>((totals, account) => {
+      totals[account.currency] =
+        (totals[account.currency] || 0) + Number(account.available_balance || 0);
+      return totals;
+    }, {}),
+  )
+    .map(([currency, value]) => money(value, currency))
+    .join(" · ") || "—";
+
+function getClientName(session: AuthSession) {
+  return (
+    session.client.nom_entreprise ||
+    [session.client.prenom, session.client.nom].filter(Boolean).join(" ") ||
+    session.client.email.split("@")[0]
+  );
+}
+
+function statusTone(
+  status: string,
+): "neutral" | "success" | "warning" | "danger" | "purple" {
+  if (["EXECUTED", "ACTIVE", "DISPONIBLE", "MATURE"].includes(status))
+    return "success";
+  if (["PENDING_APPROVAL", "MATURITE_EN_ATTENTE"].includes(status))
+    return "warning";
+  if (["REJECTED", "FAILED"].includes(status)) return "danger";
+  if (["RACHETEE"].includes(status)) return "purple";
+  return "neutral";
+}
+
+function statusLabel(status: string) {
+  const labels: Record<string, string> = {
+    EXECUTED: "Exécutée",
+    ACTIVE: "Active",
+    DISPONIBLE: "Disponible",
+    MATURE: "À maturité",
+    PENDING_APPROVAL: "À valider",
+    MATURITE_EN_ATTENTE: "Maturité à valider",
+    REJECTED: "Rejetée",
+    RACHETEE: "Rachetée",
+    FAILED: "Échec",
+  };
+  return labels[status] || status.replaceAll("_", " ");
+}
+
+function transactionLabel(type: string) {
+  return (
+    (
+      {
+        DEPOT: "Dépôt",
+        RETRAIT: "Retrait",
+        TRANSFERT: "Transfert",
+        SOUSCRIPTION: "Souscription",
+        RACHAT: "Rachat",
+        REMBOURSEMENT_MATURITE: "Remboursement à maturité",
+      } as Record<string, string>
+    )[type] || type
+  );
+}
+
+function Sparkline({ positive = true }: { positive?: boolean }) {
+  const points = positive
+    ? "0,44 18,39 36,42 54,30 72,34 90,22 108,26 126,12 144,18 162,4"
+    : "0,10 18,18 36,14 54,28 72,25 90,38 108,34 126,45 144,42 162,50";
+  return (
+    <svg
+      className="sparkline"
+      viewBox="0 0 162 54"
+      preserveAspectRatio="none"
+      aria-label="Évolution du portefeuille"
+    >
+      <defs>
+        <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#a78bfa" stopOpacity=".28" />
+          <stop offset="1" stopColor="#a78bfa" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={`M ${points} L 162,54 L 0,54 Z`} fill="url(#spark-fill)" />
+      <polyline
+        points={points}
+        fill="none"
+        stroke={positive ? "#c4b5fd" : "#fb7185"}
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
+  const [email, setEmail] = useState(demoAccounts[0].email);
+  const [password, setPassword] = useState(demoAccounts[0].password);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.login(email, password);
+      const session = { tokens: result.tokens, client: result.client };
+      storeSession(session);
+      onLogin(session);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Connexion impossible");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <main className="auth-screen">
+      <div className="auth-orb orb-one" />
+      <div className="auth-orb orb-two" />
+      <section className="auth-visual">
+        <div className="brand-mark large">
+          <span>PF</span>
+        </div>
+        <div className="auth-kicker">PROFIN / CORE INVESTMENT PLATFORM</div>
+        <h1>
+          La clarté
+          <br />
+          <em>qui investit.</em>
+        </h1>
+        <p>
+          Une console calme pour comprendre vos positions, sécuriser vos flux et
+          décider avec une longueur d’avance.
+        </p>
+        <div className="auth-visual-footer">
+          <span className="status-live">
+            <i /> Core opérationnel
+          </span>
+          <span>Prototype sécurisé</span>
+        </div>
+      </section>
+      <section className="auth-panel">
+        <div className="auth-panel-inner">
+          <div className="mobile-brand">
+            <div className="brand-mark">
+              <span>PF</span>
+            </div>
+            <div>
+              <strong>ProFin</strong>
+              <small>Core Console</small>
+            </div>
+          </div>
+          <div className="eyebrow">Espace sécurisé</div>
+          <h2>Bon retour.</h2>
+          <p className="auth-subtitle">
+            Connectez-vous pour retrouver votre vue patrimoniale.
+          </p>
+          <form onSubmit={submit} className="auth-form">
+            <label>
+              Email professionnel
+              <input
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Mot de passe
+              <div className="input-with-icon">
+                <Icon name="lock" size={17} />
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+            </label>
+            {error && (
+              <div className="form-error">
+                <Icon name="alert" size={16} />
+                {error}
+              </div>
+            )}
+            <Button type="submit" disabled={busy}>
+              {busy ? (
+                <>
+                  <Spinner /> Connexion…
+                </>
+              ) : (
+                <>
+                  Ouvrir ma console <Icon name="arrow" size={17} />
+                </>
+              )}
+            </Button>
+          </form>
+          <div className="demo-heading">
+            <span>Accès de démonstration</span>
+            <span className="demo-line" />
+          </div>
+          <div className="demo-list">
+            {demoAccounts.map((account) => (
+              <button
+                key={account.email}
+                className="demo-account"
+                onClick={() => {
+                  setEmail(account.email);
+                  setPassword(account.password);
+                }}
+              >
+                <span className="avatar small">{initials(account.label)}</span>
+                <span>
+                  <strong>{account.label}</strong>
+                  <small>{account.description}</small>
+                </span>
+                <Icon name="arrow" size={16} />
+              </button>
+            ))}
+          </div>
+          <div className="auth-note">
+            <Icon name="shield" size={15} /> Les opérations de démonstration
+            sont isolées du réel.
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function Shell({
+  session,
+  page,
+  setPage,
+  onLogout,
+  children,
+}: {
+  session: AuthSession;
+  page: Page;
+  setPage: (page: Page) => void;
+  onLogout: () => void;
+  children: React.ReactNode;
+}) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const name = getClientName(session);
+  const nav = [
+    { id: "overview" as Page, label: "Vue d’ensemble", icon: "grid" as const },
+    { id: "investments" as Page, label: "Investir", icon: "trend" as const },
+    {
+      id: "operations" as Page,
+      label: "Flux de trésorerie",
+      icon: "swap" as const,
+    },
+    { id: "accounts" as Page, label: "Mes comptes", icon: "wallet" as const },
+  ];
+  const go = (next: Page) => {
+    setPage(next);
+    setMobileOpen(false);
+  };
+  return (
+    <div className="app-shell">
+      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
+        <div className="sidebar-top">
+          <div className="brand-lockup">
+            <div className="brand-mark">
+              <span>PF</span>
+            </div>
+            <div>
+              <strong>ProFin</strong>
+              <small>Core Console</small>
+            </div>
+          </div>
+          <button
+            className="icon-button mobile-close"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Fermer le menu"
+          >
+            <Icon name="close" />
+          </button>
+        </div>
+        <div className="workspace-switch">
+          <span className="workspace-dot" />
+          <span>
+            <small>Environnement</small>
+            <strong>Prototype local</strong>
+          </span>
+          <Icon name="chevron" size={15} />
+        </div>
+        <nav className="main-nav" aria-label="Navigation principale">
+          <span className="nav-label">Pilotage</span>
+          {nav.map((item) => (
+            <button
+              key={item.id}
+              className={`nav-item ${page === item.id ? "active" : ""}`}
+              onClick={() => go(item.id)}
+            >
+              <Icon name={item.icon} size={19} />
+              <span>{item.label}</span>
+              {item.id === "operations" && (
+                <span className="nav-notification">!</span>
+              )}
+            </button>
+          ))}
+          <span className="nav-label nav-spacer">Compte</span>
+          <button
+            className={`nav-item ${page === "profile" ? "active" : ""}`}
+            onClick={() => go("profile")}
+          >
+            <Icon name="user" size={19} />
+            <span>Mon profil</span>
+          </button>
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="security-card">
+            <Icon name="shield" size={20} />
+            <div>
+              <strong>Données protégées</strong>
+              <small>Connexion chiffrée</small>
+            </div>
+          </div>
+          <button className="logout-button" onClick={onLogout}>
+            <Icon name="logout" size={18} /> Déconnexion
+          </button>
+          <div className="sidebar-meta">
+            PROFIN CORE <span>v2.0.0</span>
+          </div>
+        </div>
+      </aside>
+      <div className="mobile-backdrop" onClick={() => setMobileOpen(false)} />
+      <main className="main-area">
+        <header className="topbar">
+          <button
+            className="icon-button menu-trigger"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Ouvrir le menu"
+          >
+            <Icon name="menu" />
+          </button>
+          <div className="breadcrumbs">
+            <span>Console</span>
+            <Icon name="chevron" size={14} />
+            <strong>
+              {nav.find((item) => item.id === page)?.label || "Mon profil"}
+            </strong>
+          </div>
+          <div className="topbar-actions">
+            <div className="core-status">
+              <i /> <span>Core en ligne</span>
+            </div>
+            <button className="icon-button" aria-label="Rechercher">
+              <Icon name="search" size={19} />
+            </button>
+            <button
+              className="icon-button notification-button"
+              aria-label="Notifications"
+            >
+              <Icon name="bell" size={19} />
+              <b />
+            </button>
+            <button className="user-chip" onClick={() => go("profile")}>
+              <span className="avatar">{initials(name)}</span>
+              <span className="user-chip-name">{name}</span>
+              <Icon name="chevron" size={14} />
+            </button>
+          </div>
+        </header>
+        <div className="page-content">{children}</div>
+        <nav className="mobile-nav" aria-label="Navigation mobile">
+          {nav.slice(0, 4).map((item) => (
+            <button
+              key={item.id}
+              className={page === item.id ? "active" : ""}
+              onClick={() => go(item.id)}
+            >
+              <Icon name={item.icon} size={19} />
+              <span>{item.label.split(" ")[0]}</span>
+            </button>
+          ))}
+        </nav>
+      </main>
+    </div>
+  );
+}
+
+function DashboardPage({
+  session,
+  overview,
+  recent,
+  investments,
+  go,
+}: {
+  session: AuthSession;
+  overview: DashboardOverview | null;
+  recent: Transaction[];
+  investments: Subscription[];
+  go: (page: Page) => void;
+}) {
+  const currency = overview?.currency || "USD";
+  const pending = recent.filter((item) => item.status === "PENDING_APPROVAL");
+  const name = getClientName(session).split(" ")[0];
+  return (
+    <div className="page-stack page-enter">
+      <div className="hero-row">
+        <div>
+          <div className="eyebrow">
+            {new Intl.DateTimeFormat("fr-FR", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            }).format(new Date())}
+          </div>
+          <h1>Bonjour, {name}.</h1>
+          <p className="hero-copy">
+            Votre patrimoine évolue avec intention. Voici ce qui mérite votre
+            attention aujourd’hui.
+          </p>
+        </div>
+        <Button icon="plus" onClick={() => go("operations")}>
+          Nouvelle opération
+        </Button>
+      </div>
+      <div className="signal-strip">
+        <div className="signal-mark">
+          <Icon name="spark" size={18} />
+        </div>
+        <div>
+          <strong>Votre portefeuille travaille.</strong>
+          <span>Rendement consolidé sur vos positions actives.</span>
+        </div>
+        <div className="signal-value">
+          +{number(overview?.return_percentage)}
+          <small>% depuis l’origine</small>
+        </div>
+        <div className="signal-chart">
+          <Sparkline positive={(overview?.total_return || 0) >= 0} />
+        </div>
+      </div>
+      <div className="metric-grid">
+        <Metric
+          label="Valeur du portefeuille"
+          value={money(overview?.total_value, currency)}
+          helper={`${overview?.active_subscriptions || 0} positions actives`}
+          trend={`+${number(overview?.return_percentage)}%`}
+          icon="trend"
+        />
+        <Metric
+          label="Capital investi"
+          value={money(overview?.total_invested, currency)}
+          helper="Valeur nette engagée"
+          icon="bank"
+        />
+        <Metric
+          label="Liquidités disponibles"
+          value={liquidityByCurrency(overview?.accounts || [])}
+          helper={`${overview?.accounts?.length || 0} comptes rattachés`}
+          icon="wallet"
+        />
+        <Metric
+          label="Flux à traiter"
+          value={String(pending.length).padStart(2, "0")}
+          helper="Validation maker / checker"
+          icon="swap"
+        />
+      </div>
+      <div className="dashboard-grid">
+        <section className="panel allocation-panel">
+          <SectionHeader
+            eyebrow="Vision patrimoniale"
+            title="Vos actifs, en un regard"
+            action={
+              <button className="text-button" onClick={() => go("investments")}>
+                Voir les positions <Icon name="arrow" size={15} />
+              </button>
+            }
+          />
+          <div className="allocation-visual">
+            <div className="donut">
+              <div className="donut-inner">
+                <strong>{overview?.active_subscriptions || 0}</strong>
+                <span>positions</span>
+              </div>
+            </div>
+            <div className="allocation-legend">
+              <div>
+                <i className="legend-dot violet" />
+                <span>Obligations</span>
+                <strong>{money(overview?.total_value, currency)}</strong>
+              </div>
+              <div>
+                <i className="legend-dot gold" />
+                <span>Liquidités</span>
+                <strong>
+                  {liquidityByCurrency(overview?.accounts || [])}
+                </strong>
+              </div>
+              <div>
+                <i className="legend-dot slate" />
+                <span>En attente</span>
+                <strong>{money(0, currency)}</strong>
+              </div>
+            </div>
+          </div>
+          <div className="panel-footnote">
+            <Icon name="shield" size={15} /> Valorisation issue du Core
+            Investment Platform
+          </div>
+        </section>
+        <section className="panel attention-panel">
+          <SectionHeader eyebrow="À surveiller" title="Centre d’attention" />
+          <div className="attention-list">
+            {pending.length ? (
+              pending.slice(0, 3).map((transaction) => (
+                <div className="attention-item" key={transaction.id}>
+                  <span className="attention-icon">
+                    <Icon name="alert" size={17} />
+                  </span>
+                  <div>
+                    <strong>
+                      {transactionLabel(transaction.transaction_type)}
+                    </strong>
+                    <span>
+                      {money(transaction.amount, transaction.currency)} · En
+                      attente de validation
+                    </span>
+                  </div>
+                  <Icon name="arrow" size={16} />
+                </div>
+              ))
+            ) : (
+              <div className="quiet-state">
+                <span className="quiet-check">
+                  <Icon name="check" size={17} />
+                </span>
+                <div>
+                  <strong>Tout est à jour</strong>
+                  <span>Aucune validation urgente pour le moment.</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <button className="attention-cta" onClick={() => go("operations")}>
+            Ouvrir le centre des opérations <Icon name="arrow" size={16} />
+          </button>
+        </section>
+      </div>
+      <section className="panel table-panel">
+        <SectionHeader
+          eyebrow="Activité récente"
+          title="Les derniers mouvements"
+          action={
+            <button className="text-button" onClick={() => go("operations")}>
+              Tout voir <Icon name="arrow" size={15} />
+            </button>
+          }
+        />
+        {recent.length ? (
+          <TransactionTable transactions={recent.slice(0, 5)} />
+        ) : (
+          <EmptyState
+            title="Votre activité apparaîtra ici"
+            description="Créez une première opération pour commencer à suivre vos flux."
+            action={
+              <Button onClick={() => go("operations")} icon="plus">
+                Créer une opération
+              </Button>
+            }
+          />
+        )}
+      </section>
+      <section className="investment-preview">
+        <SectionHeader
+          eyebrow="Positions actives"
+          title="Vos investissements"
+          action={
+            <button className="text-button" onClick={() => go("investments")}>
+              Explorer le marché <Icon name="arrow" size={15} />
+            </button>
+          }
+        />
+        {investments.length ? (
+          <div className="investment-mini-grid">
+            {investments.slice(0, 3).map((item) => (
+              <div className="investment-mini" key={item.id}>
+                <div className="investment-mini-top">
+                  <span className="instrument-logo">
+                    {item.instrument_code?.slice(-2) || "PF"}
+                  </span>
+                  <Badge tone="success">Active</Badge>
+                </div>
+                <strong>{item.instrument_name}</strong>
+                <span>
+                  {item.instrument_code} · échéance{" "}
+                  {date(item.effective_maturity_date)}
+                </span>
+                <div className="investment-mini-value">
+                  <strong>
+                    {money(item.current_value, item.currency || currency)}
+                  </strong>
+                  <span>
+                    +
+                    {money(
+                      Number(item.current_value) - Number(item.invested_amount),
+                      item.currency || currency,
+                    )}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="panel">
+            <EmptyState
+              title="Aucune position active"
+              description="Découvrez les instruments disponibles pour construire votre allocation."
+              action={
+                <Button onClick={() => go("investments")}>
+                  Voir les opportunités
+                </Button>
+              }
+            />
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function TransactionTable({
+  transactions,
+  onApprove,
+  onReject,
+  currentClientId,
+}: {
+  transactions: Transaction[];
+  onApprove?: (id: number) => void;
+  onReject?: (transaction: Transaction) => void;
+  currentClientId?: number;
+}) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Opération</th>
+            <th>Compte</th>
+            <th>Date</th>
+            <th>Statut</th>
+            <th className="align-right">Montant</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {transactions.map((transaction) => {
+            const own =
+              currentClientId &&
+              transaction.created_by_client_id === currentClientId;
+            return (
+              <tr key={transaction.id}>
+                <td>
+                  <div className="table-operation">
+                    <span
+                      className={`transaction-icon ${transaction.transaction_type === "DEPOT" ? "in" : transaction.transaction_type === "RETRAIT" ? "out" : "move"}`}
+                    >
+                      <Icon
+                        name={
+                          transaction.transaction_type === "TRANSFERT"
+                            ? "swap"
+                            : transaction.transaction_type === "DEPOT"
+                              ? "arrow"
+                              : "bank"
+                        }
+                        size={16}
+                      />
+                    </span>
+                    <div>
+                      <strong>
+                        {transactionLabel(transaction.transaction_type)}
+                      </strong>
+                      <small>
+                        {transaction.description ||
+                          (transaction.is_automatic
+                            ? "Généré automatiquement"
+                            : `Référence #${transaction.id}`)}
+                      </small>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <span className="mono">
+                    {transaction.source_account_number ||
+                      transaction.destination_account_number ||
+                      "—"}
+                  </span>
+                </td>
+                <td>{date(transaction.created_at)}</td>
+                <td>
+                  <Badge tone={statusTone(transaction.status)}>
+                    {statusLabel(transaction.status)}
+                  </Badge>
+                </td>
+                <td className="align-right">
+                  <strong
+                    className={
+                      transaction.transaction_type === "RETRAIT"
+                        ? "amount-negative"
+                        : ""
+                    }
+                  >
+                    {transaction.transaction_type === "RETRAIT" ? "−" : "+"}
+                    {money(transaction.amount, transaction.currency)}
+                  </strong>
+                </td>
+                <td>
+                  {onApprove && transaction.status === "PENDING_APPROVAL" && (
+                    <div className="row-actions">
+                      {own ? (
+                        <span className="own-maker">Votre saisie</span>
+                      ) : (
+                        <>
+                          <button
+                            className="mini-action approve"
+                            onClick={() => onApprove(transaction.id)}
+                            aria-label="Approuver"
+                          >
+                            <Icon name="check" size={15} />
+                          </button>
+                          <button
+                            className="mini-action reject"
+                            onClick={() => onReject?.(transaction)}
+                            aria-label="Rejeter"
+                          >
+                            <Icon name="close" size={15} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function InvestmentsPage({
+  token,
+  instruments,
+  investments,
+  accounts,
+  refresh,
+  notify,
+}: {
+  token: string;
+  instruments: Instrument[];
+  investments: Subscription[];
+  accounts: Account[];
+  refresh: () => Promise<void>;
+  notify: (message: string, tone?: "success" | "error") => void;
+}) {
+  const [instrument, setInstrument] = useState<Instrument | null>(null);
+  const [amount, setAmount] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [redeeming, setRedeeming] = useState<number | null>(null);
+  const available = instruments.filter((item) => item.status === "DISPONIBLE");
+  const openSubscription = (item: Instrument) => {
+    setInstrument(item);
+    setAmount(String(item.minimum_amount));
+    const match = accounts.find(
+      (account) =>
+        account.currency === item.currency &&
+        Number(account.available_balance) >= Number(item.minimum_amount),
+    );
+    setAccountId(match ? String(match.id) : "");
+  };
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!instrument || !accountId) return;
+    setBusy(true);
+    try {
+      await api.subscribe(token, {
+        account_id: Number(accountId),
+        instrument_id: instrument.id,
+        invested_amount: Number(amount),
+      });
+      notify("Souscription enregistrée et position créée.");
+      setInstrument(null);
+      await refresh();
+    } catch (err) {
+      notify(
+        err instanceof Error ? err.message : "Souscription impossible",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const redeem = async (id: number) => {
+    if (!window.confirm("Confirmer le rachat de cette position ?")) return;
+    setRedeeming(id);
+    try {
+      await api.redeem(token, id);
+      notify("Position rachetée, liquidités restaurées.");
+      await refresh();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Rachat impossible", "error");
+    } finally {
+      setRedeeming(null);
+    }
+  };
+  return (
+    <div className="page-stack page-enter">
+      <div className="hero-row">
+        <div>
+          <div className="eyebrow">Marché primaire</div>
+          <h1>Investir avec intention.</h1>
+          <p className="hero-copy">
+            Des instruments sélectionnés, une lecture nette du rendement et des
+            échéances.
+          </p>
+        </div>
+        <div className="hero-context">
+          <span className="status-live">
+            <i /> Marché disponible
+          </span>
+          <span>3 instruments suivis</span>
+        </div>
+      </div>
+      <section className="panel market-intro">
+        <div>
+          <span className="eyebrow">Allocation intelligente</span>
+          <h2>Des opportunités qui ont un horizon.</h2>
+          <p>
+            Chaque position relie un rendement, une échéance et une décision de
+            trésorerie compréhensible.
+          </p>
+        </div>
+        <div className="market-symbol">
+          <Icon name="trend" size={34} />
+        </div>
+      </section>
+      <SectionHeader
+        eyebrow="Opportunités disponibles"
+        title="Construire une position"
+        description="Sélectionnez un instrument pour ouvrir le parcours de souscription."
+      />
+      <div className="instrument-grid">
+        {available.map((item) => (
+          <article className="instrument-card" key={item.id}>
+            <div className="instrument-card-top">
+              <span className="instrument-logo large-logo">
+                {item.code.split("-")[1]?.slice(0, 2) || "PF"}
+              </span>
+              <Badge tone="success">Disponible</Badge>
+            </div>
+            <div className="instrument-type">
+              {item.instrument_type || "Instrument"} · {item.currency}
+            </div>
+            <h3>{item.name}</h3>
+            <p>{item.description || `Émis par ${item.issuer}.`}</p>
+            <div className="instrument-stats">
+              <div>
+                <span>Rendement annuel</span>
+                <strong>+{number(item.annual_yield)}%</strong>
+              </div>
+              <div>
+                <span>Échéance</span>
+                <strong>{date(item.maturity_date)}</strong>
+              </div>
+            </div>
+            <div className="instrument-bottom">
+              <span>Minimum {money(item.minimum_amount, item.currency)}</span>
+              <Button onClick={() => openSubscription(item)} icon="arrow">
+                Étudier l’offre
+              </Button>
+            </div>
+          </article>
+        ))}
+      </div>
+      <SectionHeader
+        eyebrow="Votre portefeuille"
+        title="Positions actives"
+        description="Suivez la valeur, le rendement et l’échéance de vos investissements."
+      />
+      {investments.length ? (
+        <div className="position-list">
+          {investments.map((item) => (
+            <div className="position-row" key={item.id}>
+              <div className="position-main">
+                <span className="instrument-logo">
+                  {item.instrument_code?.slice(-2) || "PF"}
+                </span>
+                <div>
+                  <strong>{item.instrument_name}</strong>
+                  <span>
+                    {item.instrument_code} · Compte #{item.account_id}
+                  </span>
+                </div>
+              </div>
+              <div className="position-cell">
+                <span>Investi</span>
+                <strong>
+                  {money(item.invested_amount, item.currency || "USD")}
+                </strong>
+              </div>
+              <div className="position-cell">
+                <span>Valeur actuelle</span>
+                <strong>
+                  {money(item.current_value, item.currency || "USD")}
+                </strong>
+              </div>
+              <div className="position-cell positive">
+                <span>Rendement</span>
+                <strong>
+                  +
+                  {money(
+                    Number(item.current_value) - Number(item.invested_amount),
+                    item.currency || "USD",
+                  )}
+                </strong>
+              </div>
+              <div className="position-end">
+                <Badge tone={statusTone(item.status)}>
+                  {statusLabel(item.status)}
+                </Badge>
+                <button
+                  className="text-button subtle"
+                  onClick={() => redeem(item.id)}
+                  disabled={redeeming === item.id}
+                >
+                  {redeeming === item.id ? <Spinner /> : "Racheter"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          title="Votre portefeuille est encore ouvert"
+          description="Une première souscription apparaîtra ici avec sa valeur et son échéance."
+        />
+      )}
+      {instrument && (
+        <Modal
+          title="Ouvrir une position"
+          eyebrow={instrument.code}
+          onClose={() => setInstrument(null)}
+        >
+          <div className="modal-instrument">
+            <span className="instrument-logo large-logo">
+              {instrument.code.split("-")[1]?.slice(0, 2) || "PF"}
+            </span>
+            <div>
+              <strong>{instrument.name}</strong>
+              <span>
+                +{number(instrument.annual_yield)}% annuel · échéance{" "}
+                {date(instrument.maturity_date)}
+              </span>
+            </div>
+          </div>
+          <form className="modal-form" onSubmit={submit}>
+            <label>
+              Compte de financement
+              <select
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                required
+              >
+                <option value="">Choisir un compte</option>
+                {accounts
+                  .filter((account) => account.currency === instrument.currency)
+                  .map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.account_number} · disponible{" "}
+                      {money(account.available_balance, account.currency)}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              Montant investi
+              <div className="input-suffix">
+                <input
+                  type="number"
+                  min={instrument.minimum_amount}
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  required
+                />
+                <span>{instrument.currency}</span>
+              </div>
+              <small className="helper">
+                Minimum requis :{" "}
+                {money(instrument.minimum_amount, instrument.currency)}
+              </small>
+            </label>
+            <div className="modal-summary">
+              <span>Validation prototype</span>
+              <strong>Exécution immédiate</strong>
+              <small>
+                La souscription sera enregistrée, le compte débité et la
+                position créée dans le Core.
+              </small>
+            </div>
+            <Button type="submit" disabled={busy || !accountId}>
+              {busy ? (
+                <>
+                  <Spinner /> Enregistrement…
+                </>
+              ) : (
+                "Confirmer la souscription"
+              )}
+            </Button>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function OperationsPage({
+  token,
+  accounts,
+  transactions,
+  currentClientId,
+  refresh,
+  notify,
+}: {
+  token: string;
+  accounts: Account[];
+  transactions: Transaction[];
+  currentClientId: number;
+  refresh: () => Promise<void>;
+  notify: (message: string, tone?: "success" | "error") => void;
+}) {
+  const [kind, setKind] = useState<"DEPOT" | "RETRAIT" | "TRANSFERT">("DEPOT");
+  const [sourceId, setSourceId] = useState("");
+  const [destinationId, setDestinationId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState("USD");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState<Transaction | null>(null);
+  const [reason, setReason] = useState("");
+  const [tab, setTab] = useState<"new" | "review" | "history">("new");
+  const currencies = [...new Set(accounts.map((account) => account.currency))];
+  const resetForKind = (next: typeof kind) => {
+    setKind(next);
+    setSourceId("");
+    setDestinationId("");
+    setCurrency(currencies[0] || "USD");
+  };
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await api.createTransaction(token, {
+        transaction_type: kind,
+        amount: Number(amount),
+        currency,
+        source_account_id: kind !== "DEPOT" ? Number(sourceId) : undefined,
+        destination_account_id:
+          kind !== "RETRAIT" ? Number(destinationId) : undefined,
+        description: description || undefined,
+      });
+      notify("Opération créée et envoyée pour validation.");
+      setAmount("");
+      setDescription("");
+      setTab("history");
+      await refresh();
+    } catch (err) {
+      notify(
+        err instanceof Error ? err.message : "Opération impossible",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const approve = async (id: number) => {
+    try {
+      await api.approve(token, id);
+      notify("Opération approuvée et exécutée.");
+      await refresh();
+    } catch (err) {
+      notify(
+        err instanceof Error ? err.message : "Validation impossible",
+        "error",
+      );
+    }
+  };
+  const reject = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!rejectTarget) return;
+    try {
+      await api.reject(token, rejectTarget.id, reason);
+      notify("Opération rejetée.");
+      setRejectTarget(null);
+      setReason("");
+      await refresh();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Rejet impossible", "error");
+    }
+  };
+  const pending = transactions.filter(
+    (transaction) => transaction.status === "PENDING_APPROVAL",
+  );
+  return (
+    <div className="page-stack page-enter">
+      <div className="hero-row">
+        <div>
+          <div className="eyebrow">Core operations</div>
+          <h1>Vos flux, sous contrôle.</h1>
+          <p className="hero-copy">
+            Initiez, vérifiez et suivez chaque mouvement sans perdre le
+            contexte.
+          </p>
+        </div>
+        <div className="hero-context">
+          <span className="status-live">
+            <i /> Journal actif
+          </span>
+          <span>{pending.length} à valider</span>
+        </div>
+      </div>
+      <div className="operation-tabs">
+        <button
+          className={tab === "new" ? "active" : ""}
+          onClick={() => setTab("new")}
+        >
+          <Icon name="plus" size={16} /> Nouvelle opération
+        </button>
+        <button
+          className={tab === "review" ? "active" : ""}
+          onClick={() => setTab("review")}
+        >
+          <Icon name="shield" size={16} /> À valider{" "}
+          <span>{pending.length}</span>
+        </button>
+        <button
+          className={tab === "history" ? "active" : ""}
+          onClick={() => setTab("history")}
+        >
+          <Icon name="refresh" size={16} /> Historique
+        </button>
+      </div>
+      {tab === "new" && (
+        <section className="operation-layout">
+          <div className="panel operation-form-panel">
+            <SectionHeader
+              eyebrow="Créer un mouvement"
+              title="Nouvelle opération"
+              description="Les opérations sont créées par un maker puis validées par un checker."
+            />
+            <div className="operation-type-selector">
+              {(["DEPOT", "RETRAIT", "TRANSFERT"] as const).map((type) => (
+                <button
+                  key={type}
+                  className={kind === type ? "active" : ""}
+                  onClick={() => resetForKind(type)}
+                >
+                  <span>
+                    <Icon
+                      name={
+                        type === "TRANSFERT"
+                          ? "swap"
+                          : type === "DEPOT"
+                            ? "arrow"
+                            : "bank"
+                      }
+                      size={17}
+                    />
+                  </span>
+                  {transactionLabel(type)}
+                </button>
+              ))}
+            </div>
+            <form className="operation-form" onSubmit={submit}>
+              <div className="form-grid">
+                <label>
+                  {kind === "DEPOT" ? "Compte crédité" : "Compte débité"}
+                  <select
+                    value={kind === "DEPOT" ? destinationId : sourceId}
+                    onChange={(e) =>
+                      kind === "DEPOT"
+                        ? setDestinationId(e.target.value)
+                        : setSourceId(e.target.value)
+                    }
+                    required
+                  >
+                    <option value="">Sélectionner un compte</option>
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.account_number} ·{" "}
+                        {money(account.available_balance, account.currency)}{" "}
+                        disponibles
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {kind === "TRANSFERT" && (
+                  <label>
+                    Compte destinataire
+                    <select
+                      value={destinationId}
+                      onChange={(e) => setDestinationId(e.target.value)}
+                      required
+                    >
+                      <option value="">Sélectionner un compte</option>
+                      {accounts
+                        .filter((account) => String(account.id) !== sourceId)
+                        .map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.account_number} · {account.currency}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
+                <label>
+                  Montant
+                  <div className="input-suffix">
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder="0.00"
+                      required
+                    />
+                    <span>{currency}</span>
+                  </div>
+                </label>
+                <label>
+                  Devise
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                  >
+                    {currencies.map((item) => (
+                      <option key={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label>
+                Libellé de l’opération
+                <input
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Ex. Allocation mensuelle"
+                />
+              </label>
+              <div className="maker-checker-note">
+                <span>
+                  <Icon name="shield" size={18} />
+                </span>
+                <div>
+                  <strong>Contrôle à deux niveaux</strong>
+                  <p>
+                    Après votre saisie, un autre utilisateur habilité devra
+                    approuver le mouvement. Vous ne pouvez pas valider votre
+                    propre opération.
+                  </p>
+                </div>
+              </div>
+              <Button type="submit" disabled={busy}>
+                {busy ? (
+                  <>
+                    <Spinner /> Envoi…
+                  </>
+                ) : (
+                  <>
+                    Envoyer pour validation <Icon name="arrow" size={17} />
+                  </>
+                )}
+              </Button>
+            </form>
+          </div>
+          <aside className="panel operation-aside">
+            <div className="aside-kicker">
+              <span className="signal-pulse" /> Live ledger
+            </div>
+            <h3>
+              Le Core garde
+              <br />
+              <em>le fil.</em>
+            </h3>
+            <p>
+              Chaque débit, crédit et écriture comptable est traité dans une
+              transaction atomique.
+            </p>
+            <div className="ledger-line">
+              <span>Liquidités disponibles</span>
+              <strong>
+                {liquidityByCurrency(accounts)}
+              </strong>
+            </div>
+            <div className="ledger-line">
+              <span>Dernière synchronisation</span>
+              <strong>À l’instant</strong>
+            </div>
+            <div className="aside-foot">
+              <Icon name="lock" size={15} /> Audit trail actif
+            </div>
+          </aside>
+        </section>
+      )}
+      {tab === "review" && (
+        <section className="panel table-panel">
+          <SectionHeader
+            eyebrow="Séparation des tâches"
+            title="File de validation"
+            description="Validez ou rejetez les mouvements créés par un autre utilisateur habilité."
+          />
+          {pending.length ? (
+            <TransactionTable
+              transactions={pending}
+              currentClientId={currentClientId}
+              onApprove={approve}
+              onReject={setRejectTarget}
+            />
+          ) : (
+            <EmptyState
+              title="File vide"
+              description="Aucune opération n’attend de validation. Le Core est à jour."
+            />
+          )}
+        </section>
+      )}
+      {tab === "history" && (
+        <section className="panel table-panel">
+          <SectionHeader
+            eyebrow="Journal des mouvements"
+            title="Historique complet"
+            action={
+              <button className="icon-button" aria-label="Exporter">
+                <Icon name="download" size={17} />
+              </button>
+            }
+          />
+          {transactions.length ? (
+            <TransactionTable transactions={transactions} />
+          ) : (
+            <EmptyState
+              title="Aucun mouvement"
+              description="Les opérations de vos comptes apparaîtront ici."
+            />
+          )}
+        </section>
+      )}
+      <section className="maturity-banner">
+        <div className="maturity-icon">
+          <Icon name="calendar" size={21} />
+        </div>
+        <div>
+          <strong>Maintenance des maturités</strong>
+          <span>
+            Détectez les positions arrivées à échéance et générez leurs
+            remboursements à valider.
+          </span>
+        </div>
+        <button
+          onClick={async () => {
+            try {
+              const result = await api.generateMaturities(token);
+              notify(`${result.total} remboursement(s) généré(s).`);
+              await refresh();
+            } catch (err) {
+              notify(
+                err instanceof Error ? err.message : "Maintenance impossible",
+                "error",
+              );
+            }
+          }}
+        >
+          Lancer le contrôle <Icon name="arrow" size={16} />
+        </button>
+      </section>
+      {rejectTarget && (
+        <Modal
+          title="Rejeter l’opération"
+          eyebrow={`Référence #${rejectTarget.id}`}
+          onClose={() => setRejectTarget(null)}
+        >
+          <p className="modal-copy">
+            Le rejet ne modifiera aucun solde. Le motif restera attaché à la
+            piste d’audit.
+          </p>
+          <form className="modal-form" onSubmit={reject}>
+            <label>
+              Motif du rejet
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                minLength={3}
+                placeholder="Expliquez la décision…"
+                required
+              />
+            </label>
+            <Button variant="danger" type="submit">
+              Confirmer le rejet
+            </Button>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function AccountsPage({
+  token,
+  accounts,
+  refresh,
+  notify,
+}: {
+  token: string;
+  accounts: Account[];
+  refresh: () => Promise<void>;
+  notify: (message: string, tone?: "success" | "error") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState("INVESTISSEMENT");
+  const [currency, setCurrency] = useState("USD");
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await api.openAccount(token, { account_type: type, currency });
+      notify("Nouveau compte ouvert avec succès.");
+      setOpen(false);
+      await refresh();
+    } catch (err) {
+      notify(
+        err instanceof Error ? err.message : "Création impossible",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="page-stack page-enter">
+      <div className="hero-row">
+        <div>
+          <div className="eyebrow">Architecture de trésorerie</div>
+          <h1>Vos comptes, alignés.</h1>
+          <p className="hero-copy">
+            Un point d’ancrage clair pour chaque devise, chaque usage et chaque
+            décision.
+          </p>
+        </div>
+        <Button icon="plus" onClick={() => setOpen(true)}>
+          Ouvrir un compte
+        </Button>
+      </div>
+      <div className="account-summary">
+        <div>
+          <span>Total disponible</span>
+          <strong>
+            {liquidityByCurrency(accounts)}
+          </strong>
+        </div>
+        <div>
+          <span>Comptes actifs</span>
+          <strong>
+            {String(
+              accounts.filter((account) => account.status === "ACTIF").length,
+            ).padStart(2, "0")}
+          </strong>
+        </div>
+        <div>
+          <span>Devises suivies</span>
+          <strong>
+            {new Set(accounts.map((account) => account.currency)).size}
+          </strong>
+        </div>
+        <div className="summary-mark">
+          <Icon name="wallet" size={28} />
+        </div>
+      </div>
+      <SectionHeader
+        eyebrow="Vue consolidée"
+        title="Tous vos comptes"
+        description="Vos droits d’accès et leurs soldes disponibles sont reflétés en temps réel."
+      />
+      <div className="account-grid">
+        {accounts.map((account, index) => (
+          <article
+            className={`account-card ${index === 0 ? "featured" : ""}`}
+            key={account.id}
+          >
+            <div className="account-card-glow" />
+            <div className="account-card-top">
+              <span className="account-kind">
+                <Icon
+                  name={account.account_type === "EPARGNE" ? "bank" : "wallet"}
+                  size={16}
+                />{" "}
+                {account.account_type}
+              </span>
+              <Badge tone={account.status === "ACTIF" ? "success" : "warning"}>
+                {account.status === "ACTIF"
+                  ? "Actif"
+                  : statusLabel(account.status)}
+              </Badge>
+            </div>
+            <span className="account-number">{account.account_number}</span>
+            <strong className="account-balance">
+              {money(account.balance, account.currency)}
+            </strong>
+            <div className="account-available">
+              <span>Disponible</span>
+              <strong>
+                {money(account.available_balance, account.currency)}
+              </strong>
+            </div>
+            <div className="account-card-bottom">
+              <span>
+                {account.currency} · {account.role?.replaceAll("_", " ")}
+              </span>
+              <button aria-label={`Voir le compte ${account.account_number}`}>
+                <Icon name="arrow" size={17} />
+              </button>
+            </div>
+          </article>
+        ))}
+        <button className="account-add-card" onClick={() => setOpen(true)}>
+          <span>
+            <Icon name="plus" size={22} />
+          </span>
+          <strong>Ajouter un compte</strong>
+          <small>USD, HTG ou EUR</small>
+        </button>
+      </div>
+      <div className="info-callout">
+        <Icon name="shield" size={18} />
+        <div>
+          <strong>Chaque compte a son rôle.</strong>
+          <span>
+            Les mandats, droits de consultation et opérations sont contrôlés par
+            le Core avant toute écriture.
+          </span>
+        </div>
+      </div>
+      {open && (
+        <Modal
+          title="Ouvrir un compte"
+          eyebrow="Nouveau compte"
+          onClose={() => setOpen(false)}
+        >
+          <form className="modal-form" onSubmit={submit}>
+            <label>
+              Type de compte
+              <select value={type} onChange={(e) => setType(e.target.value)}>
+                <option value="INVESTISSEMENT">Investissement</option>
+                <option value="EPARGNE">Épargne</option>
+                <option value="CASH">Liquidités</option>
+              </select>
+            </label>
+            <label>
+              Devise
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+              >
+                <option>USD</option>
+                <option>HTG</option>
+                <option>EUR</option>
+              </select>
+            </label>
+            <div className="modal-summary">
+              <span>Rôle attribué</span>
+              <strong>Titulaire principal</strong>
+              <small>
+                Le compte sera disponible immédiatement pour vos parcours de
+                trésorerie.
+              </small>
+            </div>
+            <Button type="submit" disabled={busy}>
+              {busy ? (
+                <>
+                  <Spinner /> Création…
+                </>
+              ) : (
+                "Confirmer l’ouverture"
+              )}
+            </Button>
+          </form>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function ProfilePage({
+  token,
+  profile,
+  refresh,
+  notify,
+}: {
+  token: string;
+  profile: Profile | null;
+  refresh: () => Promise<void>;
+  notify: (message: string, tone?: "success" | "error") => void;
+}) {
+  const [phone, setPhone] = useState(profile?.phone || "");
+  const [line1, setLine1] = useState(profile?.address?.line1 || "");
+  const [city, setCity] = useState(profile?.address?.city || "");
+  const [postal, setPostal] = useState(profile?.address?.postal_code || "");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (profile) {
+      setPhone(profile.phone || "");
+      setLine1(profile.address?.line1 || "");
+      setCity(profile.address?.city || "");
+      setPostal(profile.address?.postal_code || "");
+    }
+  }, [profile]);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await api.updateProfile(token, {
+        telephone: phone,
+        adresse_ligne1: line1,
+        ville: city,
+        code_postal: postal,
+      });
+      notify("Profil mis à jour.");
+      await refresh();
+    } catch (err) {
+      notify(
+        err instanceof Error ? err.message : "Mise à jour impossible",
+        "error",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!profile)
+    return (
+      <div className="loading-state">
+        <Spinner /> Chargement du profil…
+      </div>
+    );
+  return (
+    <div className="page-stack page-enter">
+      <div className="hero-row">
+        <div>
+          <div className="eyebrow">Identité & conformité</div>
+          <h1>Votre profil, votre contexte.</h1>
+          <p className="hero-copy">
+            Gardez vos informations à jour pour des opérations fluides et
+            traçables.
+          </p>
+        </div>
+        <Badge tone="success">KYC actif</Badge>
+      </div>
+      <div className="profile-grid">
+        <section className="panel identity-card">
+          <div className="profile-avatar">{initials(profile.full_name)}</div>
+          <h2>{profile.full_name}</h2>
+          <span>{profile.email}</span>
+          <Badge tone="purple">
+            {profile.client_type === "INSTITUTIONNEL"
+              ? "Institutionnel"
+              : "Individuel"}
+          </Badge>
+          <div className="identity-lines">
+            <div>
+              <span>Profil de risque</span>
+              <strong>{profile.risk_profile}</strong>
+            </div>
+            <div>
+              <span>Statut</span>
+              <strong>{profile.status}</strong>
+            </div>
+            <div>
+              <span>Client depuis</span>
+              <strong>2026</strong>
+            </div>
+          </div>
+          <div className="identity-security">
+            <Icon name="shield" size={18} />
+            <span>Identité vérifiée par le Core</span>
+          </div>
+        </section>
+        <section className="panel profile-form-panel">
+          <SectionHeader
+            eyebrow="Coordonnées"
+            title="Informations de contact"
+            description="Ces informations sont utilisées pour les notifications opérationnelles."
+          />
+          <form className="profile-form" onSubmit={submit}>
+            <div className="form-grid">
+              <label>
+                Email de connexion
+                <input value={profile.email} disabled />
+              </label>
+              <label>
+                Téléphone
+                <input
+                  type="tel"
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+509 …"
+                />
+              </label>
+            </div>
+            <label>
+              Adresse
+              <input
+                value={line1}
+                onChange={(e) => setLine1(e.target.value)}
+                placeholder="Adresse principale"
+              />
+            </label>
+            <div className="form-grid">
+              <label>
+                Ville
+                <input
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Port-au-Prince"
+                />
+              </label>
+              <label>
+                Code postal
+                <input
+                  value={postal}
+                  onChange={(e) => setPostal(e.target.value)}
+                  placeholder="HT6110"
+                />
+              </label>
+            </div>
+            <div className="form-actions">
+              <span>
+                <Icon name="lock" size={15} /> Les changements sont journalisés
+              </span>
+              <Button type="submit" disabled={busy}>
+                {busy ? (
+                  <>
+                    <Spinner /> Enregistrement…
+                  </>
+                ) : (
+                  "Enregistrer les changements"
+                )}
+              </Button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [session, setSession] = useState<AuthSession | null>(getStoredSession);
+  const [page, setPage] = useState<Page>("overview");
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [recent, setRecent] = useState<Transaction[]>([]);
+  const [investments, setInvestments] = useState<Subscription[]>([]);
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{
+    message: string;
+    tone: "success" | "error";
+  } | null>(null);
+  const notify = useCallback(
+    (message: string, tone: "success" | "error" = "success") => {
+      setToast({ message, tone });
+      window.setTimeout(() => setToast(null), 4200);
+    },
+    [],
+  );
+  const refresh = useCallback(async () => {
+    if (!session) return;
+    setLoading(true);
+    const token = session.tokens.access_token;
+    const results = await Promise.allSettled([
+      api.dashboard(token),
+      api.recentTransactions(token),
+      api.activeInvestments(token),
+      api.instruments(token),
+      api.accounts(token),
+      api.subscriptions(token),
+      api.transactions(token),
+      api.profile(token),
+    ]);
+    const [
+      overviewResult,
+      recentResult,
+      investmentsResult,
+      instrumentResult,
+      accountResult,
+      subscriptionsResult,
+      transactionResult,
+      profileResult,
+    ] = results;
+    if (overviewResult.status === "fulfilled")
+      setOverview(overviewResult.value);
+    if (recentResult.status === "fulfilled")
+      setRecent(recentResult.value.transactions || []);
+    if (investmentsResult.status === "fulfilled")
+      setInvestments(investmentsResult.value.investissements || []);
+    if (instrumentResult.status === "fulfilled")
+      setInstruments(instrumentResult.value.instruments || []);
+    if (accountResult.status === "fulfilled")
+      setAccounts(accountResult.value.accounts || []);
+    if (subscriptionsResult.status === "fulfilled")
+      setInvestments(subscriptionsResult.value.subscriptions || []);
+    if (transactionResult.status === "fulfilled")
+      setTransactions(transactionResult.value.transactions || []);
+    if (profileResult.status === "fulfilled") setProfile(profileResult.value);
+    setLoading(false);
+  }, [session]);
+  useEffect(() => {
+    refresh();
+    const retry = window.setTimeout(() => refresh(), 1800);
+    return () => window.clearTimeout(retry);
+  }, [refresh]);
+  const logout = async () => {
+    if (session) {
+      try {
+        await api.logout(session.tokens.refresh_token);
+      } catch {
+        /* Session locale à purger même si l'API est indisponible. */
+      }
+    }
+    storeSession(null);
+    setSession(null);
+  };
+  if (!session) return <LoginScreen onLogin={setSession} />;
+  const token = session.tokens.access_token;
+  const body =
+    page === "overview" ? (
+      <DashboardPage
+        session={session}
+        overview={overview}
+        recent={recent}
+        investments={investments}
+        go={setPage}
+      />
+    ) : page === "investments" ? (
+      <InvestmentsPage
+        token={token}
+        instruments={instruments}
+        investments={investments}
+        accounts={accounts}
+        refresh={refresh}
+        notify={notify}
+      />
+    ) : page === "operations" ? (
+      <OperationsPage
+        token={token}
+        accounts={accounts}
+        transactions={transactions}
+        currentClientId={session.client.client_id}
+        refresh={refresh}
+        notify={notify}
+      />
+    ) : page === "accounts" ? (
+      <AccountsPage
+        token={token}
+        accounts={accounts}
+        refresh={refresh}
+        notify={notify}
+      />
+    ) : (
+      <ProfilePage
+        token={token}
+        profile={profile}
+        refresh={refresh}
+        notify={notify}
+      />
+    );
+  return (
+    <>
+      <Shell session={session} page={page} setPage={setPage} onLogout={logout}>
+        {loading && (
+          <div className="sync-indicator">
+            <Spinner /> Synchronisation
+          </div>
+        )}
+        {body}
+      </Shell>
+      {toast && (
+        <div className={`toast toast-${toast.tone}`} role="status">
+          <span>
+            <Icon
+              name={toast.tone === "success" ? "check" : "alert"}
+              size={17}
+            />
+          </span>
+          {toast.message}
+          <button onClick={() => setToast(null)} aria-label="Fermer">
+            <Icon name="close" size={15} />
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+export default App;
