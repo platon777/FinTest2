@@ -1,4 +1,4 @@
-import type { Account, AuthSession, DashboardOverview, Instrument, InvestmentOrder, Profile, Subscription, Transaction } from './types';
+import type { Account, AuthSession, BackOfficeReport, ClientBusinessReport, DashboardOverview, Instrument, InvestmentOrder, Profile, Subscription, Transaction } from './types';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
 const SESSION_KEY = 'profin.core.session';
@@ -36,6 +36,8 @@ export const api = {
   login: (email: string, password: string) => request<{ success: boolean; tokens: AuthSession['tokens']; client: AuthSession['client'] }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   logout: (refreshToken: string) => request('/auth/logout', { method: 'POST', body: JSON.stringify({ refresh_token: refreshToken }) }),
   dashboard: (token: string) => request<DashboardOverview>('/dashboard/overview', {}, token),
+  clientReport: (token: string) => request<ClientBusinessReport>('/dashboard/rapports/client', {}, token),
+  backOfficeReport: (token: string) => request<BackOfficeReport>('/dashboard/rapports/back-office', {}, token),
   recentTransactions: (token: string) => request<{ transactions: Transaction[] }>('/dashboard/transactions/recentes?limit=8', {}, token),
   activeInvestments: (token: string) => request<{ investissements: Subscription[] }>('/dashboard/investissements', {}, token),
   accounts: (token: string) => request<{ accounts: Account[] }>('/comptes/', {}, token),

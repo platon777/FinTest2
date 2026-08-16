@@ -3,6 +3,8 @@ import { api, getStoredSession, storeSession } from "./api";
 import type {
   Account,
   AuthSession,
+  BackOfficeReport,
+  ClientBusinessReport,
   DashboardOverview,
   Instrument,
   InvestmentOrder,
@@ -312,6 +314,7 @@ function Shell({
   onLogout,
   theme,
   onToggleTheme,
+  canAccessBackOffice,
   children,
 }: {
   session: AuthSession;
@@ -320,6 +323,7 @@ function Shell({
   onLogout: () => void;
   theme: Theme;
   onToggleTheme: () => void;
+  canAccessBackOffice: boolean;
   children: React.ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -333,6 +337,7 @@ function Shell({
       icon: "swap" as const,
     },
     { id: "accounts" as Page, label: "Mes comptes", icon: "wallet" as const },
+    ...(canAccessBackOffice ? [{ id: "backoffice" as Page, label: "Pilotage opérationnel", icon: "building" as const }] : []),
   ];
   const go = (next: Page) => {
     setPage(next);
@@ -368,7 +373,7 @@ function Shell({
               onClick={() => go(item.id)}
             >
               <Icon name={item.icon} size={19} />
-              <span>{item.label}</span>
+              <span>{item.id === "accounts" ? "Comptes" : item.id === "operations" ? "Flux" : item.id === "overview" ? "Vue" : item.id === "investments" ? "Investir" : item.id === "backoffice" ? "Pilotage" : item.label}</span>
               {item.id === "operations" && (
                 <span className="nav-notification">!</span>
               )}
@@ -464,12 +469,14 @@ function Shell({
 function DashboardPage({
   session,
   overview,
+  report,
   recent,
   investments,
   go,
 }: {
   session: AuthSession;
   overview: DashboardOverview | null;
+  report: ClientBusinessReport | null;
   recent: Transaction[];
   investments: Subscription[];
   go: (page: Page) => void;
@@ -540,6 +547,7 @@ function DashboardPage({
           icon="swap"
         />
       </div>
+      <ClientReportPanels report={report} />
       <div className="dashboard-grid">
         <section className="panel allocation-panel">
           <SectionHeader
@@ -697,6 +705,41 @@ function DashboardPage({
             />
           </div>
         )}
+      </section>
+    </div>
+  );
+}
+
+function ClientReportPanels({ report }: { report: ClientBusinessReport | null }) {
+  if (!report) return null;
+  const upcoming = report.maturities.slice(0, 3);
+  const cashflow = report.cashflow.slice(-6);
+  const maxFlow = Math.max(...cashflow.map((item) => Math.abs(Number(item.net))), 1);
+  return (
+    <div className="report-grid">
+      <section className="panel report-panel report-currency-panel">
+        <SectionHeader eyebrow="Lecture patrimoniale" title="Un suivi par devise" description="Les montants restent séparés pour éviter de mélanger USD et HTG." />
+        <div className="currency-report-list">
+          {report.summary_by_currency.map((item) => (
+            <div className="currency-report-row" key={item.currency}>
+              <div><span className="currency-pill">{item.currency}</span><strong>{item.active_positions} position(s)</strong></div>
+              <div><strong>{money(item.current_value, item.currency)}</strong><small>{item.return_amount >= 0 ? "+" : ""}{money(item.return_amount, item.currency)} de variation</small></div>
+              <div><span>Disponible</span><strong>{money(item.available_cash, item.currency)}</strong></div>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="panel report-panel">
+        <SectionHeader eyebrow="Calendrier" title="Les prochaines échéances" description="Anticipez les remboursements qui arrivent dans les 90 prochains jours." />
+        {upcoming.length ? <div className="report-list">{upcoming.map((item) => <div className="report-list-row" key={item.subscription_id}><span className="report-date">{item.days_to_maturity} j</span><div><strong>{item.instrument_name}</strong><small>{item.instrument_code} · {date(item.maturity_date)}</small></div><b>{money(item.current_value, item.currency)}</b></div>)}</div> : <EmptyState title="Aucune échéance proche" description="Vos positions ne présentent pas de remboursement à anticiper." />}
+      </section>
+      <section className="panel report-panel">
+        <SectionHeader eyebrow="Flux exécutés" title="Tendance de trésorerie" description="Dépôts, investissements et remboursements sur les derniers mois." />
+        {cashflow.length ? <div className="cashflow-list">{cashflow.map((item) => <div className="cashflow-row" key={`${item.month}-${item.currency}`}><div><strong>{new Intl.DateTimeFormat("fr-FR", { month: "short" }).format(new Date(item.month))}</strong><small>{item.currency}</small></div><div className="cashflow-track"><span style={{ width: `${Math.max(8, Math.round(Math.abs(Number(item.net)) / maxFlow * 100))}%` }} className={item.net >= 0 ? "positive" : "negative"} /></div><b>{item.net >= 0 ? "+" : "−"}{money(Math.abs(item.net), item.currency)}</b></div>)}</div> : <EmptyState title="Pas encore de tendance" description="Les mouvements exécutés alimenteront ce suivi." />}
+      </section>
+      <section className="panel report-panel">
+        <SectionHeader eyebrow="Parcours des ordres" title="Où en sont vos demandes ?" description="Chaque demande reste visible jusqu’à sa validation finale." />
+        <div className="pipeline-list">{report.order_pipeline.length ? report.order_pipeline.map((item) => <div className="pipeline-row" key={item.status}><span className={`pipeline-dot ${statusTone(item.status)}`} /><div><strong>{statusLabel(item.status)}</strong><small>{item.count} demande(s)</small></div><b>{Object.entries(item.amount_by_currency).map(([currency, value]) => money(value, currency)).join(" · ")}</b></div>) : <EmptyState title="Aucune demande en cours" description="Vos prochaines demandes apparaîtront ici." />}</div>
       </section>
     </div>
   );
@@ -1734,6 +1777,77 @@ function AccountsPage({
   );
 }
 
+function BackOfficePage({
+  token,
+  report,
+  refresh,
+  notify,
+}: {
+  token: string;
+  report: BackOfficeReport | null;
+  refresh: () => Promise<void>;
+  notify: (message: string, tone?: "success" | "error") => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const stepLabels: Record<string, string> = { CONFORMITE: "Contrôle conformité", BACK_OFFICE: "Traitement opérationnel", CHECKER: "Validation finale" };
+  const review = async (item: BackOfficeReport["queue"][number]) => {
+    setBusyId(`${item.queue_type}-${item.id}`);
+    try {
+      if (item.queue_type === "TRANSACTION") await api.approve(token, item.id);
+      else await api.reviewOrderStep(token, item.id, item.next_step, "APPROVE", "Contrôle traité depuis le pilotage");
+      notify("Opération validée et file actualisée.");
+      await refresh();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Validation impossible", "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
+  const reject = async (item: BackOfficeReport["queue"][number]) => {
+    if (!window.confirm("Rejeter cette opération et libérer le montant réservé ?")) return;
+    setBusyId(`${item.queue_type}-${item.id}`);
+    try {
+      if (item.queue_type === "TRANSACTION") await api.reject(token, item.id, "Pièce ou contrôle complémentaire requis");
+      else await api.reviewOrderStep(token, item.id, item.next_step, "REJECT", "Pièce ou contrôle complémentaire requis");
+      notify("Opération rejetée et file actualisée.");
+      await refresh();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Rejet impossible", "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
+  if (!report) return <div className="loading-state"><Spinner /> Chargement du pilotage…</div>;
+  return (
+    <div className="page-stack page-enter">
+      <div className="hero-row">
+        <div><div className="eyebrow">Pilotage opérationnel</div><h1>Les opérations à traiter.</h1><p className="hero-copy">Une vue claire des demandes, des validations et des échéances de votre périmètre.</p></div>
+        <Badge tone="success">Périmètre habilité</Badge>
+      </div>
+      <div className="metric-grid">
+        <Metric label="Demandes en cours" value={String(report.kpis.orders_in_review).padStart(2, "0")} helper="Parcours d’investissement" trend={report.kpis.orders_in_review ? "À traiter" : undefined} icon="trend" />
+        <Metric label="Mouvements à valider" value={String(report.kpis.transactions_pending).padStart(2, "0")} helper="Dépôts, retraits et transferts" icon="swap" />
+        <Metric label="Comptes suivis" value={String(report.kpis.active_accounts)} helper="Dans votre périmètre" icon="wallet" />
+        <Metric label="Échéances proches" value={String(report.kpis.maturities_next_horizon).padStart(2, "0")} helper="À anticiper sous 90 jours" icon="calendar" />
+      </div>
+      <section className="panel workflow-board">
+        <SectionHeader eyebrow="Parcours de validation" title="La file, étape par étape" description="Les demandes avancent dans l’ordre prévu et restent rattachées à leur compte." />
+        <div className="workflow-columns">{report.workflow.map((item) => <div className="workflow-column" key={item.step}><div className="workflow-column-head"><span>{item.step === "CONFORMITE" ? "01" : item.step === "BACK_OFFICE" ? "02" : "03"}</span><strong>{stepLabels[item.step]}</strong></div><b>{item.count}</b><small>{item.oldest_age_days ? `Plus ancienne : ${item.oldest_age_days} j` : "Aucune attente"}</small></div>)}</div>
+      </section>
+      <div className="report-grid backoffice-report-grid">
+        <section className="panel report-panel report-queue-panel">
+          <SectionHeader eyebrow="À traiter maintenant" title="File des opérations" description="Traitez les éléments dans l’ordre d’arrivée et gardez une trace de chaque décision." />
+          {report.queue.length ? <div className="backoffice-queue">{report.queue.map((item) => <div className="backoffice-queue-row" key={`${item.queue_type}-${item.id}`}><div className="queue-type"><span className="instrument-logo"><Icon name={item.queue_type === "TRANSACTION" ? "swap" : "trend"} size={16} /></span><div><strong>{item.queue_type === "TRANSACTION" ? transactionLabel(item.operation) : item.operation}</strong><small>{item.client_name} · {item.account_number || "Compte"}</small></div></div><div><strong>{money(item.amount, item.currency)}</strong><small>{stepLabels[item.next_step] || "Validation"} · {item.age_days} j</small></div><div className="queue-actions"><Button onClick={() => review(item)} disabled={busyId === `${item.queue_type}-${item.id}`} icon="check">{busyId === `${item.queue_type}-${item.id}` ? "..." : "Valider"}</Button><button className="mini-action reject" onClick={() => reject(item)} disabled={Boolean(busyId)} aria-label="Rejeter"><Icon name="close" size={15} /></button></div></div>)}</div> : <EmptyState title="La file est à jour" description="Aucune opération ne nécessite votre intervention." />}
+        </section>
+        <section className="panel report-panel">
+          <SectionHeader eyebrow="Vigilance" title="Points à suivre" description="Les signaux utiles pour organiser la journée." />
+          {report.exceptions.length ? <div className="report-list">{report.exceptions.map((item) => <div className="report-list-row" key={item.code}><span className="attention-icon"><Icon name="alert" size={16} /></span><div><strong>{item.title}</strong><small>{item.detail}</small></div></div>)}</div> : <EmptyState title="Aucun point bloquant" description="La file ne présente pas d’anomalie à surveiller." />}
+        </section>
+      </div>
+    </div>
+  );
+}
+
 function ProfilePage({
   token,
   profile,
@@ -1905,6 +2019,8 @@ function App() {
   });
   const [page, setPage] = useState<Page>("overview");
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [clientReport, setClientReport] = useState<ClientBusinessReport | null>(null);
+  const [backOfficeReport, setBackOfficeReport] = useState<BackOfficeReport | null>(null);
   const [recent, setRecent] = useState<Transaction[]>([]);
   const [investments, setInvestments] = useState<Subscription[]>([]);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
@@ -1930,6 +2046,8 @@ function App() {
     const token = session.tokens.access_token;
     const results = await Promise.allSettled([
       api.dashboard(token),
+      api.clientReport(token),
+      api.backOfficeReport(token),
       api.recentTransactions(token),
       api.activeInvestments(token),
       api.instruments(token),
@@ -1941,6 +2059,8 @@ function App() {
     ]);
     const [
       overviewResult,
+      clientReportResult,
+      backOfficeReportResult,
       recentResult,
       investmentsResult,
       instrumentResult,
@@ -1952,6 +2072,10 @@ function App() {
     ] = results;
     if (overviewResult.status === "fulfilled")
       setOverview(overviewResult.value);
+    if (clientReportResult.status === "fulfilled")
+      setClientReport(clientReportResult.value);
+    if (backOfficeReportResult.status === "fulfilled")
+      setBackOfficeReport(backOfficeReportResult.value);
     if (recentResult.status === "fulfilled")
       setRecent(recentResult.value.transactions || []);
     if (investmentsResult.status === "fulfilled")
@@ -1995,6 +2119,7 @@ function App() {
       <DashboardPage
         session={session}
         overview={overview}
+        report={clientReport}
         recent={recent}
         investments={investments}
         go={setPage}
@@ -2026,6 +2151,8 @@ function App() {
         refresh={refresh}
         notify={notify}
       />
+    ) : page === "backoffice" ? (
+      <BackOfficePage token={token} report={backOfficeReport} refresh={refresh} notify={notify} />
     ) : (
       <ProfilePage
         token={token}
@@ -2036,7 +2163,7 @@ function App() {
     );
   return (
     <>
-      <Shell session={session} page={page} setPage={setPage} onLogout={logout} theme={theme} onToggleTheme={() => setTheme((current) => current === "light" ? "dark" : "light")}>
+      <Shell session={session} page={page} setPage={setPage} onLogout={logout} theme={theme} canAccessBackOffice={Boolean(backOfficeReport)} onToggleTheme={() => setTheme((current) => current === "light" ? "dark" : "light")}>
         {loading && (
           <div className="sync-indicator">
             <Spinner /> Synchronisation

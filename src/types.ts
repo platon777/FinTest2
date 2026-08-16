@@ -1,4 +1,41 @@
-export type Page = 'overview' | 'investments' | 'operations' | 'accounts' | 'profile';
+export type Page = 'overview' | 'investments' | 'operations' | 'accounts' | 'profile' | 'backoffice';
+
+export interface CurrencyReport {
+  currency: string;
+  invested: number;
+  current_value: number;
+  accrued_interest: number;
+  return_amount: number;
+  return_percentage: number;
+  available_cash: number;
+  balance: number;
+  active_positions: number;
+  reserved_orders: number;
+}
+
+export interface ClientBusinessReport {
+  as_of: string;
+  generated_at: string;
+  kpis: { active_positions: number; pending_orders: number; accounts: number; maturities_next_horizon: number };
+  summary_by_currency: CurrencyReport[];
+  allocation: { instrument_type: string; currency: string; current_value: number }[];
+  positions: { subscription_id: number; account_id: number; instrument_code: string; instrument_name: string; instrument_type: string; currency: string; invested_amount: number; current_value: number; return_amount: number; return_percentage: number; maturity_date: string; days_to_maturity: number }[];
+  order_pipeline: { status: string; count: number; amount_by_currency: Record<string, number> }[];
+  maturities: { subscription_id: number; instrument_code: string; instrument_name: string; currency: string; current_value: number; maturity_date: string; days_to_maturity: number }[];
+  cashflow: { month: string; currency: string; deposits: number; withdrawals: number; investments: number; maturities: number; net: number }[];
+  alerts: { code: string; severity: string; title: string; detail: string }[];
+}
+
+export interface BackOfficeReport {
+  as_of: string;
+  generated_at: string;
+  scope: { accounts: number; account_numbers: string[]; roles: string[] };
+  kpis: { orders_in_review: number; transactions_pending: number; total_items_in_queue: number; active_accounts: number; active_positions: number; maturities_next_horizon: number };
+  workflow: { step: string; count: number; amount_by_currency: Record<string, number>; oldest_age_days: number }[];
+  queue: { queue_type: string; id: number; client_name: string; account_number?: string | null; operation: string; instrument_code?: string | null; amount: number; currency: string; status: string; next_step: string; age_days: number; created_at: string }[];
+  positions_by_currency: { currency: string; current_value: number }[];
+  exceptions: { code: string; severity: string; title: string; detail: string }[];
+}
 
 export interface ClientInfo {
   client_id: number;
