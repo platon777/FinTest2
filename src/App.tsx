@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { api, getStoredSession, storeSession } from "./api";
+import { ApiError, api, getStoredSession, storeSession } from "./api";
 import type {
   Account,
   AuthSession,
@@ -10,6 +10,7 @@ import type {
   InvestmentOrder,
   Page,
   Profile,
+  RegulatoryReport,
   Subscription,
   Transaction,
 } from "./types";
@@ -180,7 +181,7 @@ function Sparkline({ positive = true }: { positive?: boolean }) {
   );
 }
 
-function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
+function LoginScreen({ onLogin, notice = "" }: { onLogin: (session: AuthSession) => void; notice?: string }) {
   const [email, setEmail] = useState(demoAccounts[0].email);
   const [password, setPassword] = useState(demoAccounts[0].password);
   const [busy, setBusy] = useState(false);
@@ -233,6 +234,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: AuthSession) => void }) {
             Accédez à vos comptes, positions et ordres en cours.
           </p>
           <form onSubmit={submit} className="auth-form">
+            {notice && <div className="form-notice">{notice}</div>}
             <label>
               Email professionnel
               <input
@@ -722,7 +724,7 @@ function ClientReportPanels({ report }: { report: ClientBusinessReport | null })
         <div className="currency-report-list">
           {report.summary_by_currency.map((item) => (
             <div className="currency-report-row" key={item.currency}>
-              <div><span className="currency-pill">{item.currency}</span><strong>{item.active_positions} position(s)</strong></div>
+              <div><span className="currency-pill">{item.currency}</span><strong>{item.active_positions} position(s)</strong><small>TMA {Number(item.tma_percentage).toFixed(2)}% Â· frais {money(item.fees, item.currency)}</small></div>
               <div><strong>{money(item.current_value, item.currency)}</strong><small>{item.return_amount >= 0 ? "+" : ""}{money(item.return_amount, item.currency)} de variation</small></div>
               <div><span>Disponible</span><strong>{money(item.available_cash, item.currency)}</strong></div>
             </div>
@@ -749,11 +751,13 @@ function TransactionTable({
   transactions,
   onApprove,
   onReject,
+  onReverse,
   currentClientId,
 }: {
   transactions: Transaction[];
   onApprove?: (id: number) => void;
   onReject?: (transaction: Transaction) => void;
+  onReverse?: (transaction: Transaction) => void;
   currentClientId?: number;
 }) {
   return (
@@ -854,6 +858,11 @@ function TransactionTable({
                         </>
                       )}
                     </div>
+                  )}
+                  {onReverse && transaction.status === "EXECUTED" && !transaction.reversed_at && (
+                    <button className="mini-action reverse" onClick={() => onReverse(transaction)} aria-label="Corriger">
+                      <Icon name="refresh" size={15} />
+                    </button>
                   )}
                 </td>
               </tr>
@@ -1284,6 +1293,16 @@ function OperationsPage({
       notify(err instanceof Error ? err.message : "Rejet impossible", "error");
     }
   };
+  const reverse = async (transaction: Transaction) => {
+    if (!window.confirm("Créer une demande de correction pour ce mouvement ?")) return;
+    try {
+      await api.reverse(token, transaction.id, "Correction demandee depuis le portail");
+      notify("Demande de correction envoyee pour validation.");
+      await refresh();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Correction impossible", "error");
+    }
+  };
   const pending = transactions.filter(
     (transaction) => transaction.status === "PENDING_APPROVAL",
   );
@@ -1523,7 +1542,7 @@ function OperationsPage({
             }
           />
           {transactions.length ? (
-            <TransactionTable transactions={transactions} />
+             <TransactionTable transactions={transactions} onReverse={reverse} />
           ) : (
             <EmptyState
               title="Aucun mouvement"
@@ -1547,6 +1566,8 @@ function OperationsPage({
           onClick={async () => {
             try {
               const result = await api.generateMaturities(token);
+              const coupons = await api.generateCoupons(token);
+              if (coupons.total) notify(`${result.total} remboursement(s) et ${coupons.total} coupon(s) prÃªt(s) pour validation.`);
               notify(`${result.total} remboursement(s) généré(s).`);
               await refresh();
             } catch (err) {
@@ -1780,11 +1801,13 @@ function AccountsPage({
 function BackOfficePage({
   token,
   report,
+  regulatory,
   refresh,
   notify,
 }: {
   token: string;
   report: BackOfficeReport | null;
+  regulatory: RegulatoryReport | null;
   refresh: () => Promise<void>;
   notify: (message: string, tone?: "success" | "error") => void;
 }) {
@@ -1830,6 +1853,7 @@ function BackOfficePage({
         <Metric label="Comptes suivis" value={String(report.kpis.active_accounts)} helper="Dans votre périmètre" icon="wallet" />
         <Metric label="Échéances proches" value={String(report.kpis.maturities_next_horizon).padStart(2, "0")} helper="À anticiper sous 90 jours" icon="calendar" />
       </div>
+      {regulatory && <section className="panel regulatory-strip"><SectionHeader eyebrow="Vue de supervision" title="Actifs, frais et coupons" description="Une lecture par devise pour suivre la valeur des comptes et les mouvements de rendement." /><div className="regulatory-metrics">{regulatory.aum_by_currency.map((item) => <div className="regulatory-metric" key={item.currency}><span>{item.currency} · actifs suivis</span><strong>{money(item.value, item.currency)}</strong><small>Frais {money(regulatory.fees_by_currency.find((fee) => fee.currency === item.currency)?.value || 0, item.currency)}</small></div>)}<div className="regulatory-metric"><span>Coupons</span><strong>{regulatory.coupon_control.paid}</strong><small>Montants suivis par devise</small></div></div></section>}
       <section className="panel workflow-board">
         <SectionHeader eyebrow="Parcours de validation" title="La file, étape par étape" description="Les demandes avancent dans l’ordre prévu et restent rattachées à leur compte." />
         <div className="workflow-columns">{report.workflow.map((item) => <div className="workflow-column" key={item.step}><div className="workflow-column-head"><span>{item.step === "CONFORMITE" ? "01" : item.step === "BACK_OFFICE" ? "02" : "03"}</span><strong>{stepLabels[item.step]}</strong></div><b>{item.count}</b><small>{item.oldest_age_days ? `Plus ancienne : ${item.oldest_age_days} j` : "Aucune attente"}</small></div>)}</div>
@@ -2013,6 +2037,7 @@ function ProfilePage({
 
 function App() {
   const [session, setSession] = useState<AuthSession | null>(getStoredSession);
+  const [authNotice, setAuthNotice] = useState("");
   const [theme, setTheme] = useState<Theme>(() => {
     const stored = localStorage.getItem(THEME_KEY);
     return stored === "dark" ? "dark" : "light";
@@ -2021,6 +2046,7 @@ function App() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [clientReport, setClientReport] = useState<ClientBusinessReport | null>(null);
   const [backOfficeReport, setBackOfficeReport] = useState<BackOfficeReport | null>(null);
+  const [regulatoryReport, setRegulatoryReport] = useState<RegulatoryReport | null>(null);
   const [recent, setRecent] = useState<Transaction[]>([]);
   const [investments, setInvestments] = useState<Subscription[]>([]);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
@@ -2048,6 +2074,7 @@ function App() {
       api.dashboard(token),
       api.clientReport(token),
       api.backOfficeReport(token),
+      api.regulatoryReport(token),
       api.recentTransactions(token),
       api.activeInvestments(token),
       api.instruments(token),
@@ -2061,6 +2088,7 @@ function App() {
       overviewResult,
       clientReportResult,
       backOfficeReportResult,
+      regulatoryReportResult,
       recentResult,
       investmentsResult,
       instrumentResult,
@@ -2070,12 +2098,33 @@ function App() {
       ordersResult,
       profileResult,
     ] = results;
+    const hasUnauthorized = results.some(
+      (result) => result.status === "rejected" && result.reason instanceof ApiError && result.reason.status === 401,
+    );
+    if (hasUnauthorized) {
+      try {
+        const tokens = await api.refresh(session.tokens.refresh_token);
+        const nextSession = { ...session, tokens };
+        storeSession(nextSession);
+        setSession(nextSession);
+        setLoading(false);
+        return;
+      } catch {
+        storeSession(null);
+        setSession(null);
+        setAuthNotice("Votre session a expiré. Reconnectez-vous pour retrouver vos données.");
+        setLoading(false);
+        return;
+      }
+    }
     if (overviewResult.status === "fulfilled")
       setOverview(overviewResult.value);
     if (clientReportResult.status === "fulfilled")
       setClientReport(clientReportResult.value);
     if (backOfficeReportResult.status === "fulfilled")
       setBackOfficeReport(backOfficeReportResult.value);
+    if (regulatoryReportResult.status === "fulfilled")
+      setRegulatoryReport(regulatoryReportResult.value);
     if (recentResult.status === "fulfilled")
       setRecent(recentResult.value.transactions || []);
     if (investmentsResult.status === "fulfilled")
@@ -2112,7 +2161,7 @@ function App() {
     storeSession(null);
     setSession(null);
   };
-  if (!session) return <LoginScreen onLogin={setSession} />;
+  if (!session) return <LoginScreen onLogin={(nextSession) => { setAuthNotice(""); setSession(nextSession); }} notice={authNotice} />;
   const token = session.tokens.access_token;
   const body =
     page === "overview" ? (
@@ -2152,7 +2201,7 @@ function App() {
         notify={notify}
       />
     ) : page === "backoffice" ? (
-      <BackOfficePage token={token} report={backOfficeReport} refresh={refresh} notify={notify} />
+      <BackOfficePage token={token} report={backOfficeReport} regulatory={regulatoryReport} refresh={refresh} notify={notify} />
     ) : (
       <ProfilePage
         token={token}

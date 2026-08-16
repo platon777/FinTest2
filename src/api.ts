@@ -1,7 +1,17 @@
-import type { Account, AuthSession, BackOfficeReport, ClientBusinessReport, DashboardOverview, Instrument, InvestmentOrder, Profile, Subscription, Transaction } from './types';
+import type { Account, AuthSession, BackOfficeReport, ClientBusinessReport, DashboardOverview, Instrument, InvestmentOrder, Profile, RegulatoryReport, Subscription, Transaction } from './types';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
 const SESSION_KEY = 'profin.core.session';
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
 
 export function getStoredSession(): AuthSession | null {
   try {
@@ -27,17 +37,19 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   try { payload = raw ? JSON.parse(raw) : null; } catch { payload = raw; }
   if (!response.ok) {
     const detail = typeof payload === 'object' && payload && 'detail' in payload ? String((payload as { detail: unknown }).detail) : `Erreur API (${response.status})`;
-    throw new Error(detail);
+    throw new ApiError(detail, response.status);
   }
   return payload as T;
 }
 
 export const api = {
   login: (email: string, password: string) => request<{ success: boolean; tokens: AuthSession['tokens']; client: AuthSession['client'] }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  refresh: (refreshToken: string) => request<AuthSession['tokens']>('/auth/refresh', { method: 'POST', body: JSON.stringify({ refresh_token: refreshToken }) }),
   logout: (refreshToken: string) => request('/auth/logout', { method: 'POST', body: JSON.stringify({ refresh_token: refreshToken }) }),
   dashboard: (token: string) => request<DashboardOverview>('/dashboard/overview', {}, token),
   clientReport: (token: string) => request<ClientBusinessReport>('/dashboard/rapports/client', {}, token),
   backOfficeReport: (token: string) => request<BackOfficeReport>('/dashboard/rapports/back-office', {}, token),
+  regulatoryReport: (token: string) => request<RegulatoryReport>('/dashboard/rapports/reglementaire', {}, token),
   recentTransactions: (token: string) => request<{ transactions: Transaction[] }>('/dashboard/transactions/recentes?limit=8', {}, token),
   activeInvestments: (token: string) => request<{ investissements: Subscription[] }>('/dashboard/investissements', {}, token),
   accounts: (token: string) => request<{ accounts: Account[] }>('/comptes/', {}, token),
@@ -51,6 +63,8 @@ export const api = {
   cancelOrder: (token: string, orderId: number) => request<{ order: InvestmentOrder }>(`/ordres/${orderId}/cancel`, { method: 'POST' }, token),
   redeem: (token: string, id: number) => request<{ souscription: Subscription }>(`/souscriptions/${id}/racheter`, { method: 'POST' }, token),
   generateMaturities: (token: string, asOf?: string) => request<{ total: number; transactions: Transaction[] }>(`/souscriptions/maintenance/maturites${asOf ? `?as_of=${asOf}` : ''}`, { method: 'POST' }, token),
+  generateCoupons: (token: string, asOf?: string) => request<{ total: number; payments: unknown[] }>(`/souscriptions/maintenance/coupons${asOf ? `?as_of=${asOf}` : ''}`, { method: 'POST' }, token),
+  reverse: (token: string, id: number, reason: string) => request<{ transaction: Transaction }>(`/transactions/${id}/reverse`, { method: 'POST', body: JSON.stringify({ reason }) }, token),
   transactions: (token: string) => request<{ transactions: Transaction[] }>('/transactions/mes-transactions', {}, token),
   createTransaction: (token: string, payload: Record<string, unknown>) => request<{ transaction: Transaction }>('/transactions/', { method: 'POST', body: JSON.stringify(payload) }, token),
   approve: (token: string, id: number) => request<{ transaction: Transaction }>(`/transactions/${id}/approve`, { method: 'POST' }, token),
