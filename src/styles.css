@@ -256,3 +256,44 @@ html[data-theme="light"] .assistant-disclaimer { color: #627089; }
 .regulatory-strip { margin-top: 14px; }.regulatory-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }.regulatory-metric { display: flex; flex-direction: column; gap: 5px; padding: 13px; border: 1px solid var(--border); border-radius: 10px; background: rgba(139, 92, 246, .05); }.regulatory-metric span, .regulatory-metric small { color: var(--muted); font-size: 10px; }.regulatory-metric strong { font-size: 18px; letter-spacing: -.03em; }
 @media (max-width: 860px) { .regulatory-metrics { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 620px) { .regulatory-metrics { grid-template-columns: 1fr; } }
+
+/* Investment journey: positions first, then requests, then new opportunities. */
+.investments-page > .portfolio-overview { margin-top: -2px; }
+.portfolio-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px; }
+.portfolio-summary-grid > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: rgba(139, 92, 246, .05); }
+.portfolio-summary-grid span, .portfolio-summary-grid small { color: var(--muted); font-size: 10px; }
+.portfolio-summary-grid strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 19px; letter-spacing: -.03em; }
+.portfolio-summary-grid small.positive { color: var(--green); }
+.portfolio-summary-grid small.negative { color: var(--red); }
+.portfolio-flow { display: flex; align-items: center; gap: 10px; margin-top: 15px; padding-top: 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: 10px; }
+.portfolio-flow span { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.portfolio-flow b { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: var(--purple-light); background: rgba(139, 92, 246, .14); font-size: 10px; }
+.portfolio-flow span.active { color: var(--text); font-weight: 600; }
+.portfolio-flow span.active b { color: #20120a; background: var(--gold); }
+.portfolio-flow i { width: 34px; height: 1px; background: var(--border); }
+.positions-area, .order-area, .opportunity-area { display: flex; flex-direction: column; gap: 12px; }
+.position-end { flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.position-end .badge { margin-left: auto; }
+.position-end .text-button { min-height: 40px; padding: 0 7px; }
+.position-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 5px 0 16px; }
+.position-detail-grid > div { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: rgba(139, 92, 246, .05); }
+.position-detail-grid span { color: var(--muted); font-size: 10px; }
+.position-detail-grid strong { font-size: 15px; }
+html[data-theme="light"] .portfolio-summary-grid > div, html[data-theme="light"] .position-detail-grid > div { background: #ffffff; }
+
+@media (max-width: 860px) {
+  .portfolio-summary-grid { grid-template-columns: repeat(2, 1fr); }
+  .portfolio-flow { flex-wrap: wrap; }
+  .portfolio-flow i { flex: 1; max-width: 60px; }
+}
+@media (max-width: 620px) {
+  .portfolio-summary-grid { gap: 8px; }
+  .portfolio-summary-grid > div { padding: 11px; }
+  .portfolio-summary-grid strong { font-size: 16px; }
+  .portfolio-flow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .portfolio-flow i { display: none; }
+  .position-end { align-items: flex-start; justify-content: flex-start; }
+  .position-end .badge { margin-left: 0; }
+  .position-end .text-button { min-height: 44px; }
+  .position-detail-grid { grid-template-columns: 1fr 1fr; }
+}

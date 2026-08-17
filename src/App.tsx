@@ -51,6 +51,18 @@ const demoAccounts = [
     password: "ProfinDemo!2026",
     description: "Mandataire de validation",
   },
+  {
+    label: "Nadia Bernard",
+    email: "nadia.checker@demo.profin.ht",
+    password: "ProfinDemo!2026",
+    description: "Mandataire de contrepassation",
+  },
+  {
+    label: "Nexa Patrimoine",
+    email: "nexa.patrimoine@demo.profin.ht",
+    password: "ProfinDemo!2026",
+    description: "Entreprise · trésorerie multi-comptes",
+  },
 ];
 
 type Theme = "light" | "dark";
@@ -959,7 +971,12 @@ function InvestmentsPage({
   const [accountId, setAccountId] = useState("");
   const [busy, setBusy] = useState(false);
   const [redeeming, setRedeeming] = useState<number | null>(null);
+  const [selectedPosition, setSelectedPosition] = useState<Subscription | null>(null);
   const available = instruments.filter((item) => item.status === "DISPONIBLE");
+  const investedTotal = investments.reduce((total, item) => total + Number(item.invested_amount), 0);
+  const currentTotal = investments.reduce((total, item) => total + Number(item.current_value), 0);
+  const gainTotal = currentTotal - investedTotal;
+  const nextMaturity = investments.length ? [...investments].sort((a, b) => new Date(a.effective_maturity_date).getTime() - new Date(b.effective_maturity_date).getTime())[0] : null;
   const openSubscription = (item: Instrument) => {
     setInstrument(item);
     setAmount(String(item.minimum_amount));
@@ -1028,23 +1045,82 @@ function InvestmentsPage({
     }
   };
   return (
-    <div className="page-stack page-enter">
-      <div className="hero-row">
+    <div className="page-stack page-enter investments-page">
+      <div className="hero-row investments-hero">
         <div>
-          <div className="eyebrow">Marché primaire</div>
-          <h1>Soumettre un ordre.</h1>
+          <div className="eyebrow">Mon portefeuille</div>
+          <h1>Mes placements.</h1>
           <p className="hero-copy">
-            Des instruments sélectionnés, une lecture nette du rendement et des
-            échéances.
+            Commencez par vos positions actuelles, puis suivez vos demandes ou
+            découvrez une nouvelle opportunité.
           </p>
         </div>
         <div className="hero-context">
-          <span className="status-live">
-            <i /> Marché disponible
-          </span>
-          <span>3 instruments suivis</span>
+          <Badge tone="success">{investments.length} position(s) active(s)</Badge>
+          <button className="button button-outline" onClick={() => document.getElementById("opportunites")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}>Découvrir une opportunité</button>
         </div>
       </div>
+      <section className="panel portfolio-overview">
+        <SectionHeader eyebrow="Lecture rapide" title="Votre portefeuille aujourd’hui" description="La valeur actuelle inclut vos positions actives. Les montants ne sont pas additionnés entre devises différentes." />
+        <div className="portfolio-summary-grid">
+          <div><span>Positions actives</span><strong>{investments.length}</strong><small>Placements suivis</small></div>
+          <div><span>Capital investi</span><strong>{money(investedTotal, "USD")}</strong><small>Montant de référence</small></div>
+          <div><span>Valeur actuelle</span><strong>{money(currentTotal, "USD")}</strong><small className={gainTotal >= 0 ? "positive" : "negative"}>{gainTotal >= 0 ? "+" : "−"}{money(Math.abs(gainTotal), "USD")} de variation</small></div>
+          <div><span>Prochaine échéance</span><strong>{nextMaturity ? date(nextMaturity.effective_maturity_date) : "—"}</strong><small>{nextMaturity?.instrument_name || "Aucune échéance proche"}</small></div>
+        </div>
+        <div className="portfolio-flow" aria-label="Parcours des placements"><span className="active"><b>1</b> Mes positions</span><i /><span><b>2</b> Mes ordres</span><i /><span><b>3</b> Nouvelles opportunités</span></div>
+      </section>
+      <section className="positions-area">
+      <SectionHeader
+        eyebrow="Étape 1 · Ce que vous détenez"
+        title="Mes positions actives"
+        description="Ouvrez une position pour consulter son compte, sa valeur, son rendement et son échéance."
+      />
+      {investments.length ? (
+        <div className="position-list">
+          {investments.map((item) => (
+            <div className="position-row" key={item.id}>
+              <div className="position-main">
+                <span className="instrument-logo">{item.instrument_code?.slice(-2) || "PF"}</span>
+                <div><strong>{item.instrument_name}</strong><span>{item.instrument_code} · compte #{item.account_id}</span></div>
+              </div>
+              <div className="position-cell"><span>Investi</span><strong>{money(item.invested_amount, item.currency || "USD")}</strong></div>
+              <div className="position-cell"><span>Valeur actuelle</span><strong>{money(item.current_value, item.currency || "USD")}</strong></div>
+              <div className="position-cell positive"><span>Variation</span><strong>{Number(item.current_value) >= Number(item.invested_amount) ? "+" : "−"}{money(Math.abs(Number(item.current_value) - Number(item.invested_amount)), item.currency || "USD")}</strong></div>
+              <div className="position-end"><Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge><button className="text-button" onClick={() => setSelectedPosition(item)}>Voir le détail</button><button className="text-button subtle" onClick={() => redeem(item.id)} disabled={redeeming === item.id}>{redeeming === item.id ? <Spinner /> : "Racheter"}</button></div>
+            </div>
+          ))}
+        </div>
+      ) : <EmptyState title="Votre portefeuille est encore ouvert" description="Une première souscription apparaîtra ici avec sa valeur et son échéance." />}
+      </section>
+      <section className="order-area">
+      <SectionHeader
+        eyebrow="Étape 2 · Vos demandes"
+        title="Mes ordres"
+        description="Une demande peut être soumise, contrôlée, validée puis transformée en position."
+      />
+      {orders.length ? (
+        <div className="order-list">
+          {orders.map((order) => {
+            const nextStep = order.steps.find((step) => step.status === "PENDING");
+            const canReview = order.submitted_by_client_id !== currentClientId && Boolean(nextStep) && !["EXECUTED", "REJECTED", "CANCELLED"].includes(order.status);
+            return (
+              <article className="panel order-card" key={order.id}>
+                <div className="order-card-top"><div><span className="eyebrow">Ordre #{order.id} · {date(order.created_at)}</span><h3>{order.instrument_name || order.instrument_code}</h3><p>{money(order.amount, order.currency)} · Compte {order.account_number}</p></div><Badge tone={statusTone(order.status)}>{statusLabel(order.status)}</Badge></div>
+                <div className="order-steps">{order.steps.map((step) => <span className={step.status === "APPROVED" ? "done" : step.status === "REJECTED" ? "rejected" : step === nextStep ? "current" : ""} key={step.step_code}>{workflowStepLabel(step.step_code)}</span>)}</div>
+                <div className="order-card-actions"><span>{order.client_comment || "Ordre soumis par le client"}</span>{canReview && <Button onClick={() => reviewOrder(order)} icon="check">Traiter {nextStep ? workflowStepLabel(nextStep.step_code) : "la demande"}</Button>}{order.submitted_by_client_id === currentClientId && ["SUBMITTED", "COMPLIANCE_REVIEW", "BACK_OFFICE_REVIEW", "READY_FOR_CHECKER"].includes(order.status) && <button className="text-button subtle" onClick={() => cancelOrder(order)}>Annuler</button>}</div>
+              </article>
+            );
+          })}
+        </div>
+      ) : <EmptyState title="Aucun ordre soumis" description="Les ordres d'investissement créés depuis le portail apparaîtront ici." />}
+      </section>
+      <section className="opportunity-area" id="opportunites">
+      <SectionHeader
+        eyebrow="Étape 3 · Investir"
+        title="Découvrir les opportunités"
+        description="Comparez le rendement, le minimum, la devise et l’échéance avant de soumettre une demande."
+      />
       <section className="panel market-intro">
         <div>
           <span className="eyebrow">Référentiel d'instruments</span>
@@ -1057,11 +1133,6 @@ function InvestmentsPage({
           <Icon name="trend" size={34} />
         </div>
       </section>
-      <SectionHeader
-        eyebrow="Opportunités disponibles"
-        title="Construire une position"
-        description="Sélectionnez un instrument pour ouvrir le parcours de souscription."
-      />
       <div className="instrument-grid">
         {available.map((item) => (
           <article className="instrument-card" key={item.id}>
@@ -1095,101 +1166,18 @@ function InvestmentsPage({
           </article>
         ))}
       </div>
-      <SectionHeader
-        eyebrow="Suivi des demandes"
-        title="Ordres soumis"
-        description="Chaque demande est vérifiée avant son exécution."
-      />
-      {orders.length ? (
-        <div className="order-list">
-          {orders.map((order) => {
-            const nextStep = order.steps.find((step) => step.status === "PENDING");
-            const canReview = order.submitted_by_client_id !== currentClientId && Boolean(nextStep) && !["EXECUTED", "REJECTED", "CANCELLED"].includes(order.status);
-            return (
-              <article className="panel order-card" key={order.id}>
-                <div className="order-card-top">
-                  <div>
-                    <span className="eyebrow">Ordre #{order.id} · {date(order.created_at)}</span>
-                    <h3>{order.instrument_name || order.instrument_code}</h3>
-                    <p>{money(order.amount, order.currency)} · Compte {order.account_number}</p>
-                  </div>
-                  <Badge tone={statusTone(order.status)}>{statusLabel(order.status)}</Badge>
-                </div>
-                <div className="order-steps">
-                  {order.steps.map((step) => <span className={step.status === "APPROVED" ? "done" : step.status === "REJECTED" ? "rejected" : step === nextStep ? "current" : ""} key={step.step_code}>{workflowStepLabel(step.step_code)}</span>)}
-                </div>
-                <div className="order-card-actions">
-                  <span>{order.client_comment || "Ordre soumis par le client"}</span>
-                  {canReview && <Button onClick={() => reviewOrder(order)} icon="check">Traiter {nextStep ? workflowStepLabel(nextStep.step_code) : "la demande"}</Button>}
-                  {order.submitted_by_client_id === currentClientId && ["SUBMITTED", "COMPLIANCE_REVIEW", "BACK_OFFICE_REVIEW", "READY_FOR_CHECKER"].includes(order.status) && <button className="text-button subtle" onClick={() => cancelOrder(order)}>Annuler</button>}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      ) : <EmptyState title="Aucun ordre soumis" description="Les ordres d'investissement créés depuis le portail apparaîtront ici." />}
-      <SectionHeader
-        eyebrow="Votre portefeuille"
-        title="Positions actives"
-        description="Suivez la valeur, le rendement et l’échéance de vos investissements."
-      />
-      {investments.length ? (
-        <div className="position-list">
-          {investments.map((item) => (
-            <div className="position-row" key={item.id}>
-              <div className="position-main">
-                <span className="instrument-logo">
-                  {item.instrument_code?.slice(-2) || "PF"}
-                </span>
-                <div>
-                  <strong>{item.instrument_name}</strong>
-                  <span>
-                    {item.instrument_code} · Compte #{item.account_id}
-                  </span>
-                </div>
-              </div>
-              <div className="position-cell">
-                <span>Investi</span>
-                <strong>
-                  {money(item.invested_amount, item.currency || "USD")}
-                </strong>
-              </div>
-              <div className="position-cell">
-                <span>Valeur actuelle</span>
-                <strong>
-                  {money(item.current_value, item.currency || "USD")}
-                </strong>
-              </div>
-              <div className="position-cell positive">
-                <span>Rendement</span>
-                <strong>
-                  +
-                  {money(
-                    Number(item.current_value) - Number(item.invested_amount),
-                    item.currency || "USD",
-                  )}
-                </strong>
-              </div>
-              <div className="position-end">
-                <Badge tone={statusTone(item.status)}>
-                  {statusLabel(item.status)}
-                </Badge>
-                <button
-                  className="text-button subtle"
-                  onClick={() => redeem(item.id)}
-                  disabled={redeeming === item.id}
-                >
-                  {redeeming === item.id ? <Spinner /> : "Racheter"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <EmptyState
-          title="Votre portefeuille est encore ouvert"
-          description="Une première souscription apparaîtra ici avec sa valeur et son échéance."
-        />
+      </section>
+      {selectedPosition && (
+        <Modal title={selectedPosition.instrument_name || "Détail de la position"} eyebrow={selectedPosition.instrument_code || undefined} onClose={() => setSelectedPosition(null)}>
+          <div className="position-detail-grid">
+            <div><span>Montant investi</span><strong>{money(selectedPosition.invested_amount, selectedPosition.currency || "USD")}</strong></div>
+            <div><span>Valeur actuelle</span><strong>{money(selectedPosition.current_value, selectedPosition.currency || "USD")}</strong></div>
+            <div><span>Rendement</span><strong className="positive">{Number(selectedPosition.current_value) >= Number(selectedPosition.invested_amount) ? "+" : "−"}{money(Math.abs(Number(selectedPosition.current_value) - Number(selectedPosition.invested_amount)), selectedPosition.currency || "USD")}</strong></div>
+            <div><span>Échéance</span><strong>{date(selectedPosition.effective_maturity_date)}</strong></div>
+          </div>
+          <p className="modal-copy">Cette position est rattachée au compte #{selectedPosition.account_id}. Vous pouvez suivre sa valeur ici et demander un rachat lorsque vous souhaitez récupérer les liquidités.</p>
+          <div className="form-actions"><Badge tone={statusTone(selectedPosition.status)}>{statusLabel(selectedPosition.status)}</Badge><Button variant="outline" onClick={() => { setSelectedPosition(null); void redeem(selectedPosition.id); }}>Racheter cette position</Button></div>
+        </Modal>
       )}
       {instrument && (
         <Modal
