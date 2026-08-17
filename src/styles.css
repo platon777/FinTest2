@@ -136,6 +136,31 @@ html[data-theme="light"] .sidebar .profin-logo { filter: drop-shadow(0 7px 14px 
 html[data-theme="light"] .auth-visual .profin-logo { filter: drop-shadow(0 10px 22px rgba(35, 84, 146, .15)); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
 
+/* Modal UX: the page stays fixed while only an oversized panel can scroll. */
+.modal-backdrop { align-items: flex-start; overflow-y: auto; overscroll-behavior: contain; padding: clamp(78px, 10vh, 100px) 16px 24px; }
+.modal { max-height: min(720px, calc(100dvh - 116px)); overflow-y: auto; overscroll-behavior: contain; }
+
+.coupon-section { margin: 4px 0 22px; padding: 14px; border: 1px solid var(--border); border-radius: 11px; background: rgba(105, 65, 198, .05); }
+.coupon-section-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+.coupon-section-header h3 { margin-top: 3px; font-size: 16px; }
+.coupon-section-header > strong { color: var(--green); font-size: 15px; }
+.coupon-list { display: flex; flex-direction: column; gap: 7px; }
+.coupon-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding-top: 9px; border-top: 1px solid var(--border); }
+.coupon-row > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.coupon-row strong { font-size: 11px; }
+.coupon-row span { color: var(--muted); font-size: 10px; }
+.coupon-row b { color: var(--text); font-size: 11px; white-space: nowrap; }
+.coupon-row .badge { font-size: 9px; white-space: nowrap; }
+.coupon-loading { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+.coupon-empty { margin: 0; }
+
+@media (max-width: 620px) {
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+  .modal { width: 100%; max-height: calc(100dvh - 65px); padding: 24px 18px calc(24px + env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; }
+  .coupon-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .coupon-row .badge { grid-column: 1 / -1; justify-self: start; }
+}
+
 .assistant-trigger { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 11px; border: 1px solid rgba(139, 92, 246, .28); border-radius: 9px; color: var(--purple-light); background: rgba(139, 92, 246, .1); font-size: 11px; font-weight: 600; transition: border-color 180ms ease, background 180ms ease, transform 180ms ease; }
 .assistant-trigger:hover, .assistant-trigger.active { border-color: rgba(196, 181, 253, .55); background: rgba(139, 92, 246, .2); transform: translateY(-1px); }
 .assistant-panel { position: fixed; top: 86px; right: 28px; z-index: 25; display: flex; width: min(390px, calc(100vw - 36px)); max-height: min(650px, calc(100vh - 108px)); flex-direction: column; overflow: hidden; border: 1px solid rgba(167, 139, 250, .32); border-radius: 16px; background: rgba(15, 23, 42, .97); box-shadow: 0 24px 70px rgba(2, 6, 23, .32); backdrop-filter: blur(24px); animation: assistant-in 180ms ease-out; }
@@ -259,7 +284,7 @@ html[data-theme="light"] .assistant-disclaimer { color: #627089; }
 
 /* Investment journey: positions first, then requests, then new opportunities. */
 .investments-page > .portfolio-overview { margin-top: -2px; }
-.portfolio-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px; }
+.portfolio-summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 15px; }
 .portfolio-summary-grid > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: rgba(139, 92, 246, .05); }
 .portfolio-summary-grid span, .portfolio-summary-grid small { color: var(--muted); font-size: 10px; }
 .portfolio-summary-grid strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 19px; letter-spacing: -.03em; }

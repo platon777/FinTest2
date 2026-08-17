@@ -1,4 +1,5 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { useEffect, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './icons';
 
 export function Button({ children, variant = 'primary', icon, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'outline' | 'danger'; icon?: Parameters<typeof Icon>[0]['name'] }) {
@@ -22,7 +23,13 @@ export function EmptyState({ title, description, action }: { title: string; desc
 }
 
 export function Modal({ title, eyebrow, onClose, children }: { title: string; eyebrow?: string; onClose: () => void; children: ReactNode }) {
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="modal" role="dialog" aria-modal="true" aria-label={title}><button className="icon-button modal-close" onClick={onClose} aria-label="Fermer"><Icon name="close" /></button>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h2>{title}</h2>{children}</div></div>;
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
+
+  return createPortal(<div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="modal" role="dialog" aria-modal="true" aria-label={title}><button className="icon-button modal-close" onClick={onClose} aria-label="Fermer"><Icon name="close" /></button>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h2>{title}</h2>{children}</div></div>, document.body);
 }
 
 export function Spinner() { return <span className="spinner" aria-label="Chargement" />; }

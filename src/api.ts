@@ -1,4 +1,4 @@
-import type { Account, AssistantChatResponse, AssistantMessage, AuthSession, BackOfficeReport, ClientBusinessReport, DashboardOverview, Instrument, InvestmentOrder, Profile, RegulatoryReport, Subscription, Transaction } from './types';
+import type { Account, AssistantChatResponse, AssistantMessage, AuthSession, BackOfficeReport, ClientBusinessReport, DashboardOverview, Instrument, InterestPayment, InvestmentOrder, Profile, RegulatoryReport, Subscription, Transaction } from './types';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
 const SESSION_KEY = 'profin.core.session';
@@ -59,6 +59,7 @@ export const api = {
   openAccount: (token: string, payload: { account_type: string; currency: string }) => request<{ account: Account }>('/comptes/', { method: 'POST', body: JSON.stringify(payload) }, token),
   instruments: (token: string) => request<{ instruments: Instrument[] }>('/instruments/', {}, token),
   subscriptions: (token: string) => request<{ subscriptions: Subscription[] }>('/souscriptions/mes-souscriptions', {}, token),
+  coupons: (token: string, subscriptionId?: number) => request<{ total: number; coupons: InterestPayment[] }>(`/souscriptions/mes-coupons${subscriptionId ? `?subscription_id=${subscriptionId}` : ''}`, {}, token),
   subscribe: (token: string, payload: { account_id: number; instrument_id: number; invested_amount: number }) => request<{ subscription: Subscription }>('/souscriptions/', { method: 'POST', body: JSON.stringify(payload) }, token),
   submitOrder: (token: string, payload: { account_id: number; instrument_id: number; amount: number; client_comment?: string }) => request<{ order: InvestmentOrder }>('/ordres/', { method: 'POST', body: JSON.stringify(payload) }, token),
   orders: (token: string) => request<{ total: number; orders: InvestmentOrder[] }>('/ordres/mes-ordres', {}, token),

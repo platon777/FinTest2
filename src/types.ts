@@ -127,6 +127,17 @@ export interface Subscription {
   currency?: string | null;
 }
 
+export interface InterestPayment {
+  id: number;
+  subscription_id: number;
+  payment_date: string;
+  amount: number;
+  status: string;
+  transaction_id?: number | null;
+  instrument_code?: string | null;
+  currency?: string | null;
+}
+
 export interface OrderStep {
   step_code: string;
   status: string;

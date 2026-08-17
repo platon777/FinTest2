@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, getStoredSession, storeSession } from "./api";
 import type {
   Account,
@@ -8,6 +8,7 @@ import type {
   ClientBusinessReport,
   DashboardOverview,
   Instrument,
+  InterestPayment,
   InvestmentOrder,
   Page,
   Profile,
@@ -62,6 +63,18 @@ const demoAccounts = [
     email: "nexa.patrimoine@demo.profin.ht",
     password: "ProfinDemo!2026",
     description: "Entreprise · trésorerie multi-comptes",
+  },
+  {
+    label: "Julien Bernard",
+    email: "julien.bernard@demo.profin.ht",
+    password: "ProfinDemo!2026",
+    description: "Investisseur individuel · coupon en attente",
+  },
+  {
+    label: "Aline Michel",
+    email: "aline.michel@demo.profin.ht",
+    password: "ProfinDemo!2026",
+    description: "Investisseuse individuelle · coupon planifié",
   },
 ];
 
@@ -798,7 +811,7 @@ function ClientReportPanels({ report }: { report: ClientBusinessReport | null })
           {report.summary_by_currency.map((item) => (
             <div className="currency-report-row" key={item.currency}>
               <div><span className="currency-pill">{item.currency}</span><strong>{item.active_positions} position(s)</strong><small>TMA {Number(item.tma_percentage).toFixed(2)}% · frais {money(item.fees, item.currency)}</small></div>
-              <div><strong>{money(item.current_value, item.currency)}</strong><small>{item.return_amount >= 0 ? "+" : ""}{money(item.return_amount, item.currency)} de variation</small></div>
+              <div><strong>{money(item.current_value, item.currency)}</strong><small>{item.return_amount >= 0 ? "+" : ""}{money(item.return_amount, item.currency)} de variation</small><small>Intérêts courus {money(item.accrued_interest, item.currency)}</small></div>
               <div><span>Disponible</span><strong>{money(item.available_cash, item.currency)}</strong></div>
             </div>
           ))}
@@ -972,10 +985,13 @@ function InvestmentsPage({
   const [busy, setBusy] = useState(false);
   const [redeeming, setRedeeming] = useState<number | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<Subscription | null>(null);
+  const [positionCoupons, setPositionCoupons] = useState<InterestPayment[]>([]);
+  const [couponsLoading, setCouponsLoading] = useState(false);
   const available = instruments.filter((item) => item.status === "DISPONIBLE");
   const investedTotal = investments.reduce((total, item) => total + Number(item.invested_amount), 0);
   const currentTotal = investments.reduce((total, item) => total + Number(item.current_value), 0);
   const gainTotal = currentTotal - investedTotal;
+  const accruedTotal = investments.reduce((total, item) => total + Number(item.accrued_interest || 0), 0);
   const nextMaturity = investments.length ? [...investments].sort((a, b) => new Date(a.effective_maturity_date).getTime() - new Date(b.effective_maturity_date).getTime())[0] : null;
   const openSubscription = (item: Instrument) => {
     setInstrument(item);
@@ -986,6 +1002,19 @@ function InvestmentsPage({
         Number(account.available_balance) >= Number(item.minimum_amount),
     );
     setAccountId(match ? String(match.id) : "");
+  };
+  const openPositionDetails = async (position: Subscription) => {
+    setSelectedPosition(position);
+    setPositionCoupons([]);
+    setCouponsLoading(true);
+    try {
+      const result = await api.coupons(token, position.id);
+      setPositionCoupons(result.coupons);
+    } catch {
+      notify("Les coupons de cette position ne sont pas disponibles pour le moment.", "error");
+    } finally {
+      setCouponsLoading(false);
+    }
   };
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -1066,6 +1095,7 @@ function InvestmentsPage({
           <div><span>Positions actives</span><strong>{investments.length}</strong><small>Placements suivis</small></div>
           <div><span>Capital investi</span><strong>{money(investedTotal, "USD")}</strong><small>Montant de référence</small></div>
           <div><span>Valeur actuelle</span><strong>{money(currentTotal, "USD")}</strong><small className={gainTotal >= 0 ? "positive" : "negative"}>{gainTotal >= 0 ? "+" : "−"}{money(Math.abs(gainTotal), "USD")} de variation</small></div>
+          <div><span>Intérêts courus</span><strong>{money(accruedTotal, "USD")}</strong><small>Revenus accumulés, pas encore versés</small></div>
           <div><span>Prochaine échéance</span><strong>{nextMaturity ? date(nextMaturity.effective_maturity_date) : "—"}</strong><small>{nextMaturity?.instrument_name || "Aucune échéance proche"}</small></div>
         </div>
         <div className="portfolio-flow" aria-label="Parcours des placements"><span className="active"><b>1</b> Mes positions</span><i /><span><b>2</b> Mes ordres</span><i /><span><b>3</b> Nouvelles opportunités</span></div>
@@ -1087,7 +1117,7 @@ function InvestmentsPage({
               <div className="position-cell"><span>Investi</span><strong>{money(item.invested_amount, item.currency || "USD")}</strong></div>
               <div className="position-cell"><span>Valeur actuelle</span><strong>{money(item.current_value, item.currency || "USD")}</strong></div>
               <div className="position-cell positive"><span>Variation</span><strong>{Number(item.current_value) >= Number(item.invested_amount) ? "+" : "−"}{money(Math.abs(Number(item.current_value) - Number(item.invested_amount)), item.currency || "USD")}</strong></div>
-              <div className="position-end"><Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge><button className="text-button" onClick={() => setSelectedPosition(item)}>Voir le détail</button><button className="text-button subtle" onClick={() => redeem(item.id)} disabled={redeeming === item.id}>{redeeming === item.id ? <Spinner /> : "Racheter"}</button></div>
+              <div className="position-end"><Badge tone={statusTone(item.status)}>{statusLabel(item.status)}</Badge><button className="text-button" onClick={() => void openPositionDetails(item)}>Voir le détail</button><button className="text-button subtle" onClick={() => redeem(item.id)} disabled={redeeming === item.id}>{redeeming === item.id ? <Spinner /> : "Racheter"}</button></div>
             </div>
           ))}
         </div>
@@ -1172,8 +1202,13 @@ function InvestmentsPage({
           <div className="position-detail-grid">
             <div><span>Montant investi</span><strong>{money(selectedPosition.invested_amount, selectedPosition.currency || "USD")}</strong></div>
             <div><span>Valeur actuelle</span><strong>{money(selectedPosition.current_value, selectedPosition.currency || "USD")}</strong></div>
+            <div><span>Intérêts courus</span><strong className="positive">{money(selectedPosition.accrued_interest || 0, selectedPosition.currency || "USD")}</strong></div>
             <div><span>Rendement</span><strong className="positive">{Number(selectedPosition.current_value) >= Number(selectedPosition.invested_amount) ? "+" : "−"}{money(Math.abs(Number(selectedPosition.current_value) - Number(selectedPosition.invested_amount)), selectedPosition.currency || "USD")}</strong></div>
             <div><span>Échéance</span><strong>{date(selectedPosition.effective_maturity_date)}</strong></div>
+          </div>
+          <div className="coupon-section">
+            <div className="coupon-section-header"><div><span className="eyebrow">Revenus de la position</span><h3>Coupons</h3></div><strong>{money(positionCoupons.filter((coupon) => coupon.status === "PAYE").reduce((total, coupon) => total + Number(coupon.amount), 0), selectedPosition.currency || "USD")}</strong></div>
+            {couponsLoading ? <div className="coupon-loading"><Spinner /> Chargement des coupons…</div> : positionCoupons.length ? <div className="coupon-list">{positionCoupons.map((coupon) => <div className="coupon-row" key={coupon.id}><div><strong>{date(coupon.payment_date)}</strong><span>{coupon.status === "PAYE" ? "Coupon versé" : coupon.status === "EN_ATTENTE" ? "Coupon à venir" : "Coupon planifié"}</span></div><b>{money(coupon.amount, coupon.currency || selectedPosition.currency || "USD")}</b><Badge tone={coupon.status === "PAYE" ? "success" : "warning"}>{coupon.status === "PAYE" ? "Payé" : coupon.status === "EN_ATTENTE" ? "En attente" : "Planifié"}</Badge></div>)}</div> : <p className="modal-copy coupon-empty">Aucun coupon enregistré pour cette position.</p>}
           </div>
           <p className="modal-copy">Cette position est rattachée au compte #{selectedPosition.account_id}. Vous pouvez suivre sa valeur ici et demander un rachat lorsque vous souhaitez récupérer les liquidités.</p>
           <div className="form-actions"><Badge tone={statusTone(selectedPosition.status)}>{statusLabel(selectedPosition.status)}</Badge><Button variant="outline" onClick={() => { setSelectedPosition(null); void redeem(selectedPosition.id); }}>Racheter cette position</Button></div>
@@ -1927,11 +1962,15 @@ function BackOfficePage({
 function ProfilePage({
   token,
   profile,
+  profileError,
+  loading,
   refresh,
   notify,
 }: {
   token: string;
   profile: Profile | null;
+  profileError: string;
+  loading: boolean;
   refresh: () => Promise<void>;
   notify: (message: string, tone?: "success" | "error") => void;
 }) {
@@ -1969,10 +2008,20 @@ function ProfilePage({
       setBusy(false);
     }
   };
-  if (!profile)
+  if (!profile && (loading || !profileError))
     return (
       <div className="loading-state">
         <Spinner /> Chargement du profil…
+      </div>
+    );
+  if (!profile)
+    return (
+      <div className="profile-unavailable">
+        <EmptyState
+          title="Profil temporairement indisponible"
+          description={profileError || "Les informations de votre profil n’ont pas pu être chargées."}
+          action={<Button onClick={() => void refresh()} icon="refresh">Réessayer</Button>}
+        />
       </div>
     );
   return (
@@ -2106,11 +2155,13 @@ function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [orders, setOrders] = useState<InvestmentOrder[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileError, setProfileError] = useState("");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
     tone: "success" | "error";
   } | null>(null);
+  const refreshInFlight = useRef<Promise<AuthSession["tokens"]> | null>(null);
   const notify = useCallback(
     (message: string, tone: "success" | "error" = "success") => {
       setToast({ message, tone });
@@ -2118,6 +2169,14 @@ function App() {
     },
     [],
   );
+  const refreshTokens = useCallback((refreshToken: string) => {
+    if (!refreshInFlight.current) {
+      refreshInFlight.current = api.refresh(refreshToken).finally(() => {
+        refreshInFlight.current = null;
+      });
+    }
+    return refreshInFlight.current;
+  }, []);
   const refresh = useCallback(async () => {
     if (!session) return;
     setLoading(true);
@@ -2155,7 +2214,7 @@ function App() {
     );
     if (hasUnauthorized) {
       try {
-        const tokens = await api.refresh(session.tokens.refresh_token);
+        const tokens = await refreshTokens(session.tokens.refresh_token);
         const nextSession = { ...session, tokens };
         storeSession(nextSession);
         setSession(nextSession);
@@ -2190,9 +2249,14 @@ function App() {
     if (transactionResult.status === "fulfilled")
       setTransactions(transactionResult.value.transactions || []);
     if (ordersResult.status === "fulfilled") setOrders(ordersResult.value.orders || []);
-    if (profileResult.status === "fulfilled") setProfile(profileResult.value);
+    if (profileResult.status === "fulfilled") {
+      setProfile(profileResult.value);
+      setProfileError("");
+    } else {
+      setProfileError("Réessayez dans quelques instants pour afficher vos informations.");
+    }
     setLoading(false);
-  }, [session]);
+  }, [refreshTokens, session]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
@@ -2259,6 +2323,8 @@ function App() {
       <ProfilePage
         token={token}
         profile={profile}
+        profileError={profileError}
+        loading={loading}
         refresh={refresh}
         notify={notify}
       />
